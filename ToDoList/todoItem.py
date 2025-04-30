@@ -6,4 +6,7 @@ class TodoItem:
         self.completed = completed
 
     def to_dict(self):
-        return {"title": self.title, "completed": self.completed}
+        return {"title": self.title,
+                "description": self.description,
+                "completed": self.completed
+                }

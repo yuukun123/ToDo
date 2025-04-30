@@ -10,8 +10,8 @@ class TodoListManager:
         self.load()
 
     # thêm 1 nhiệm vụ vào danh sách
-    def add_task(self, title):
-        self.todos.append(TodoItem(title))
+    def add_task(self, title, description):
+        self.todos.append(TodoItem(title, description))
 
     # xóa 1 nhiệm vụ trong danh sách
     def delete_task(self, index):

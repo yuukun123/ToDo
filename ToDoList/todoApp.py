@@ -1,3 +1,5 @@
+from scripts.regsetup import description
+
 from todoManage import TodoListManager
 # Import thư viện tkinter để tạo GUI.
 import tkinter as tk
@@ -19,16 +21,25 @@ class TodoApp:
         self.frame.pack(padx=10, pady=10)
 
         # Tạo ô nhập liệu để người dùng nhập tên task.
-        self.entry = tk.Entry(self.frame, width=40)
-        self.entry.pack(pady=5)
+        self.title_label = tk.Label(self.frame, text="Title")
+        self.title_label.pack()
+        self.title_entry = tk.Entry(self.frame, width=40)
+        self.title_entry.pack(pady=5)
+
+        # tạo ô nhập description
+        self.title_label = tk.Label(self.frame, text="Description")
+        self.title_label.pack()
+        self.description_entry = tk.Entry(self.frame, width=40)
+        self.description_entry.pack(pady=5)
 
         # Nút “Add Task”, gọi hàm add_task() khi bấm.
         self.add_button = tk.Button(self.frame, text="Add Task", command=self.add_task)
         self.add_button.pack(pady=5)
 
-        # Tạo Listbox để hiển thị danh sách các nhiệm vụ.
+        # Listbox hiển thị danh sách task
         self.listbox = tk.Listbox(self.frame, width=50)
         self.listbox.pack(pady=5)
+        self.listbox.bind("<<ListboxSelect>>", self.show_description)
 
         # Nút để đổi trạng thái hoàn thành/chưa hoàn thành của task được chọn.
         self.toggle_button = tk.Button(self.frame, text="Toggle Completed", command=self.toggle_task)
@@ -43,12 +54,15 @@ class TodoApp:
 
     def add_task(self):
         # dùng biến title để gán dữ liệu từ ô nhập
-        title = self.entry.get()
+        title = self.title_entry.get()
+        description = self.description_entry.get()
         if title:
             # Thêm task mới vào danh sách.
-            self.manager.add_task(title)
-            # Xóa nội dung trong ô nhập.
-            self.entry.delete(0, tk.END)
+            self.manager.add_task(title, description)
+            # Xóa nội dung trong ô nhập title.
+            self.title_entry.delete(0, tk.END)
+            # xóa nội dung trong ô nhập description
+            self.description_entry(0, tk.END)
             # Cập nhật lại listbox.
             self.refresh_list()
             # Lưu danh sách mới vào file JSON.
@@ -80,6 +94,31 @@ class TodoApp:
     def load_tasks(self):
         self.refresh_list()
 
+    # hàm hiện mô tả khi ấn vô title
+    def show_description(self, event):
+        selected = self.listbox.curselection()
+        if not selected:
+            return
+
+        index = selected[0]
+
+        # Kiểm tra nếu là dòng mô tả (bắt đầu bằng "   ↳"), thì không xử lý
+        text = self.listbox.get(index)
+        if text.strip().startswith("↳"):
+            return
+
+        # Nếu dòng kế tiếp là mô tả => xoá (toggle)
+        if index + 1 < self.listbox.size():
+            next_text = self.listbox.get(index + 1)
+            if next_text.strip().startswith("↳"):
+                self.listbox.delete(index + 1)
+                return
+
+        # Chèn mô tả bên dưới
+        if index < len(self.manager.todos):  # tránh lỗi IndexError
+            todo = self.manager.todos[index]
+            description_line = f"   ↳ {todo.description}"
+            self.listbox.insert(index + 1, description_line)
 
     def refresh_list(self):
         # Xóa toàn bộ nội dung đang hiển thị trong listbox.
