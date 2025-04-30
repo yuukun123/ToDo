@@ -5,6 +5,7 @@ from todoManage import TodoListManager
 import tkinter as tk
 # messagebox: dùng để hiện thông báo popup như cảnh báo khi người dùng không nhập task.
 from tkinter import messagebox
+import time
 
 # Class tạo giao diện
 class TodoApp:
@@ -38,7 +39,7 @@ class TodoApp:
 
         # Listbox hiển thị danh sách task
         self.listbox = tk.Listbox(self.frame, width=50)
-        self.listbox.pack(pady=5)
+        self.listbox.pack(pady=10)
         # Hiển thị phần description bằng trượt xuống
         self.listbox.bind("<<ListboxSelect>>", self.show_description)
 
@@ -118,7 +119,7 @@ class TodoApp:
         # Chèn mô tả bên dưới
         if index < len(self.manager.todos):  # tránh lỗi IndexError
             todo = self.manager.todos[index]
-            description_line = f"   ↳ {todo.description}"
+            description_line = f"   ↳ Description: {todo.description}"
             self.listbox.insert(index + 1, description_line)
 
     def refresh_list(self):
@@ -129,4 +130,8 @@ class TodoApp:
             # Nếu task đã hoàn thành → hiển thị dấu “[✔]”, ngược lại “[ ]”.
             status = "[✔]" if todo.completed else "[ ]"
             # Thêm vào listbox để hiển thị.
-            self.listbox.insert(tk.END, f"{status} {todo.title}")
+            if todo.completed and todo.completed_at:
+                time_str = f" ({todo.completed_at})"
+            else:
+                time_str = ""
+            self.listbox.insert(tk.END, f"{status} {todo.title}{time_str}")

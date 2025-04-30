@@ -1,6 +1,7 @@
 from todoItem import TodoItem
 import json
 import os
+from datetime import datetime
 
 # Class quản lý danh sách nhiệm vụ
 class TodoListManager:
@@ -20,10 +21,13 @@ class TodoListManager:
 
     # chuyển trên nhiệm vụ trong danh sách
     def toggle_task(self, index):
-        # index >= 0 and index < len(self.todos)
         if 0 <= index < len(self.todos):
-            # chuyển completed từ true sang false hoac nguoc lai
-            self.todos[index].completed = not self.todos[index].completed
+            todo = self.todos[index]
+            todo.completed = not todo.completed
+            if todo.completed:
+                todo.completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                todo.completed_at = None
 
     # Luu danh sách nhiệm vụ vào file json
     def save(self):
