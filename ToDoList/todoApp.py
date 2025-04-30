@@ -1,5 +1,3 @@
-from scripts.regsetup import description
-
 from todoManage import TodoListManager
 # Import thư viện tkinter để tạo GUI.
 import tkinter as tk
@@ -64,7 +62,7 @@ class TodoApp:
             # Xóa nội dung trong ô nhập title.
             self.title_entry.delete(0, tk.END)
             # xóa nội dung trong ô nhập description
-            self.description_entry(0, tk.END)
+            self.description_entry.delete(0, tk.END)
             # Cập nhật lại listbox.
             self.refresh_list()
             # Lưu danh sách mới vào file JSON.
