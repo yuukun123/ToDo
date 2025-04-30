@@ -39,6 +39,7 @@ class TodoApp:
         # Listbox hiển thị danh sách task
         self.listbox = tk.Listbox(self.frame, width=50)
         self.listbox.pack(pady=5)
+        # Hiển thị phần description bằng trượt xuống
         self.listbox.bind("<<ListboxSelect>>", self.show_description)
 
         # Nút để đổi trạng thái hoàn thành/chưa hoàn thành của task được chọn.
