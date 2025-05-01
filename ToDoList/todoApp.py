@@ -167,24 +167,31 @@ class TodoApp:
 
     #Hàm kiểm tra thời gian để hiện thông báo nhắc deadline
     def compare_time(self):
-    # Lấy thời gian hiện tại
-      current_time = time.time()
+        current_time = time.time()
 
-    # Duyệt qua từng task trong danh sách
-      for todo in self.manager.todos:
-        # Chuyển deadline của task thành thời gian Unix timestamp
-        deadline_str = todo.deadline + " " + todo.hour + ":" + todo.minute
-        deadline_time = time.mktime(time.strptime(deadline_str, "%d-%m-%Y %H:%M"))
+        for todo in self.manager.todos:
+            # Đảm bảo deadline, hour, minute đều có giá trị
+            if not todo.deadline or todo.hour is None or todo.minute is None:
+                continue  # bỏ qua task không đủ dữ liệu
 
-        # Tính khoảng cách thời gian giữa deadline và thời gian hiện tại
-        time_diff = deadline_time - current_time
+            try:
+                # Ép kiểu và định dạng lại hour/minute
+                hour_str = str(todo.hour).zfill(2)
+                minute_str = str(todo.minute).zfill(2)
+                deadline_str = f"{todo.deadline} {hour_str}:{minute_str}"
 
-        # Nếu deadline còn ít hơn 24 giờ (86400 giây), hiển thị thông báo nhắc
-        if time_diff <= 86400 and time_diff > 0:
-            answer = messagebox.askyesno("Reminder", f"Task '{todo.title}' is due in less than 24 hours! Would you like to turn off notifications?")
-            if answer == False:
-                # Nếu người dùng chọn "No", hoãn nhắc
-                self.postpone_notification(todo)
+                # Chuyển về dạng timestamp
+                deadline_time = time.mktime(time.strptime(deadline_str, "%d-%m-%Y %H:%M"))
+
+                time_diff = deadline_time - current_time
+
+                if 0 < time_diff <= 86400:
+                    answer = messagebox.askyesno("Reminder", f"Task '{todo.title}' is due in less than 24 hours! Would you like to turn off notifications?")
+                    if not answer:
+                        self.postpone_notification(todo)
+
+            except Exception as e:
+                print(f"[ERROR] Failed to parse deadline for task '{todo.title}': {e}")
 
     def refresh_list(self):
         # Xóa toàn bộ nội dung đang hiển thị trong listbox.
