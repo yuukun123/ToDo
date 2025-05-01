@@ -3,6 +3,8 @@ from todoManage import TodoListManager
 import tkinter as tk
 # messagebox: dùng để hiện thông báo popup như cảnh báo khi người dùng không nhập task.
 from tkinter import messagebox
+# thư viện giúp chọn date thay vì nhập
+from tkcalendar import DateEntry
 import time
 
 # Class tạo giao diện
@@ -26,11 +28,33 @@ class TodoApp:
         self.title_entry.pack(pady=5)
 
         # tạo ô nhập description
-        self.title_label = tk.Label(self.frame, text="Description")
-        self.title_label.pack()
+        self.description_label = tk.Label(self.frame, text="Description")
+        self.description_label.pack()
         self.description_entry = tk.Entry(self.frame, width=40)
         self.description_entry.pack(pady=5)
 
+        # Tạo ô nhãn "Date"
+        self.Deadline_label = tk.Label(self.frame, text="Deadline")
+        self.Deadline_label.pack()
+
+        # Tạo một dòng chứa cả label "Day" và ô DateEntry
+        self.day_frame = tk.Frame(self.frame)
+        self.day_frame.pack(pady=5, anchor='w', padx=28)
+
+        self.date_entry = DateEntry(self.day_frame, width=22, background='darkblue',
+                                    foreground='white', borderwidth=2, date_pattern='dd-mm-yyyy')
+        self.date_entry.pack(side=tk.LEFT)
+        # Spinbox chọn giờ
+        self.hour_spinbox = tk.Spinbox(self.day_frame, from_=0, to=23, width=3, format="%02.0f")
+        self.hour_spinbox.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Nhãn phân cách :
+        self.colon_label = tk.Label(self.day_frame, text=":")
+        self.colon_label.pack(side=tk.LEFT)
+
+        # Spinbox chọn phút
+        self.minute_spinbox = tk.Spinbox(self.day_frame, from_=0, to=59, width=3, format="%02.0f")
+        self.minute_spinbox.pack(side=tk.LEFT)
         # Nút “Add Task”, gọi hàm add_task() khi bấm.
         self.add_button = tk.Button(self.frame, text="Add Task", command=self.add_task)
         self.add_button.pack(pady=5)
@@ -56,13 +80,21 @@ class TodoApp:
         # dùng biến title để gán dữ liệu từ ô nhập
         title = self.title_entry.get()
         description = self.description_entry.get()
+        deadline = self.date_entry.get()
+        hour = self.hour_spinbox.get()
+        minute = self.minute_spinbox.get()
         if title:
             # Thêm task mới vào danh sách.
-            self.manager.add_task(title, description)
+            self.manager.add_task(title, hour, minute, deadline, description)
             # Xóa nội dung trong ô nhập title.
             self.title_entry.delete(0, tk.END)
             # xóa nội dung trong ô nhập description
             self.description_entry.delete(0, tk.END)
+            # reset time về 0
+            self.hour_spinbox.delete(0, tk.END)
+            self.hour_spinbox.insert(0, "00")
+            self.minute_spinbox.delete(0, tk.END)
+            self.minute_spinbox.insert(0, "00")
             # Cập nhật lại listbox.
             self.refresh_list()
             # Lưu danh sách mới vào file JSON.
@@ -118,13 +150,49 @@ class TodoApp:
         if index < len(self.manager.todos):  # tránh lỗi IndexError
             todo = self.manager.todos[index]
             description_line = f"   ↳ Description: {todo.description}"
+            deadline_line = f"   ↳ Deadline: {todo.deadline} | {todo.hour}:{todo.minute}"
+            self.listbox.insert(index + 1, deadline_line)
             self.listbox.insert(index + 1, description_line)
+
+    # Hàm hiện lại thông báo sau một khoảng thời gian
+    def remind_task(self, todo):
+        answer = messagebox.askyesno("Reminder", f"Reminder again: Task '{todo.title}' is still due soon! Turn off further reminders?")
+        if not answer:
+            self.postpone_notification(todo)
+
+    #Hàm nhắc lại thông báo
+    def postpone_notification(self, todo):
+        # Sau 30 phút (30 * 60 * 1000 = 1,800,000 milliseconds), nhắc lại
+        self.root.after(1800000, lambda: self.remind_task(todo))
+
+    #Hàm kiểm tra thời gian để hiện thông báo nhắc deadline
+    def compare_time(self):
+    # Lấy thời gian hiện tại
+      current_time = time.time()
+
+    # Duyệt qua từng task trong danh sách
+      for todo in self.manager.todos:
+        # Chuyển deadline của task thành thời gian Unix timestamp
+        deadline_str = todo.deadline + " " + todo.hour + ":" + todo.minute
+        deadline_time = time.mktime(time.strptime(deadline_str, "%d-%m-%Y %H:%M"))
+
+        # Tính khoảng cách thời gian giữa deadline và thời gian hiện tại
+        time_diff = deadline_time - current_time
+
+        # Nếu deadline còn ít hơn 24 giờ (86400 giây), hiển thị thông báo nhắc
+        if time_diff <= 86400 and time_diff > 0:
+            answer = messagebox.askyesno("Reminder", f"Task '{todo.title}' is due in less than 24 hours! Would you like to turn off notifications?")
+            if answer == False:
+                # Nếu người dùng chọn "No", hoãn nhắc
+                self.postpone_notification(todo)
 
     def refresh_list(self):
         # Xóa toàn bộ nội dung đang hiển thị trong listbox.
         self.listbox.delete(0, tk.END)
         # Lặp qua từng task trong danh sách.
         for todo in self.manager.todos:
+             # Kiểm tra và so sánh giờ deadline
+            self.compare_time()
             # Nếu task đã hoàn thành → hiển thị dấu “[✔]”, ngược lại “[ ]”.
             status = "[✔]" if todo.completed else "[ ]"
             # Thêm vào listbox để hiển thị.
