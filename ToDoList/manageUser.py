@@ -1,7 +1,6 @@
-from ToDoList.user import user
+from user import user
 import json
 import os
-
 
 class manageUser:
     def __init__(self, filename="users.json"):
