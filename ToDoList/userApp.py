@@ -60,7 +60,7 @@ class LoginRegisterApp:
             from todoApp import TodoApp
 
             new_root = tk.Tk()
-            app = TodoApp(new_root)
+            app = TodoApp(new_root, username)
             new_root.mainloop()
         else:
             messagebox.showerror("Lỗi", "Sai tên đăng nhập hoặc mật khẩu.")

@@ -5,8 +5,9 @@ from datetime import datetime
 
 # Class quản lý danh sách nhiệm vụ
 class TodoListManager:
-    def __init__(self, filename="todos.json"):
+    def __init__(self, username, filename="todos.json"):
         self.todos = []
+        self.username = username
         self.filename = filename
         self.load()
 
@@ -31,10 +32,17 @@ class TodoListManager:
 
     # Luu danh sách nhiệm vụ vào file json
     def save(self):
-        with open(self.filename, 'w') as f:
-            # ghi danh sách nhiệm vụ vào file json
-            # indent=2: (tùy chọn) thụt lề 2 khoảng trắng cho dễ đọc (pretty print).
-            json.dump([todo.to_dict() for todo in self.todos], f, indent=2)
+        data = {}
+        if os.path.exists(self.filename):
+            with open(self.filename, "r") as f:
+                try:
+                    data = json.load(f)
+                except:
+                    data = {}
+
+        data[self.username] = [todo.to_dict() for todo in self.todos]
+        with open(self.filename, "w") as f:
+            json.dump(data, f, indent=2)
 
     # Load danh sách nhiệm vụ từ file json
     def load(self):
@@ -47,4 +55,4 @@ class TodoListManager:
                 # Dùng json.load() để đọc dữ liệu từ file JSON và chuyển thành dữ liệu Python.
                 data = json.load(f)
                 # Dùng list comprehension để chuyển từng dictionary trong data thành một đối tượng TodoItem.
-                self.todos = [TodoItem(**item) for item in data]
+                self.todos = [TodoItem(**item) for item in data.get(self.username, [])]

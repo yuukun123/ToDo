@@ -9,8 +9,8 @@ import time
 
 # Class tạo giao diện
 class TodoApp:
-    def __init__(self, root):
-        self.manager = TodoListManager()
+    def __init__(self, root, username):
+        self.manager = TodoListManager(username)
         # Gán cửa sổ chính của Tkinter vào self.root.
         self.root = root
         self.root.title("Todo List - OOP")
