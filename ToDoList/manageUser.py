@@ -8,12 +8,12 @@ class manageUser:
         self.filename = filename
         self.loadUser()
 
-    def add_user(self, username, password, mail, role = "customer"):
+    def add_user(self, username, password, confirm_password, mail, role = "customer"):
         # Kiểm tra người dùng đã tồn tại chưa
         for u in self.users:
             if u.username == username:
                 return False  # đã tồn tại
-        self.users.append(user(username, password, mail, role))
+        self.users.append(user(username, password, confirm_password, mail, role))
         self.save()
         return True
 

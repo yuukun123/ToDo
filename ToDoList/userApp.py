@@ -9,13 +9,13 @@ class LoginRegisterApp:
         self.root.title("Login & Register")
         self.manager = manager
 
-        notebook = ttk.Notebook(self.root)
-        self.login_frame = tk.Frame(notebook, padx=20, pady=20)
-        self.register_frame = tk.Frame(notebook, padx=20, pady=20)
+        self.notebook = ttk.Notebook(self.root)
+        self.login_frame = tk.Frame(self.notebook, padx=20, pady=20)
+        self.register_frame = tk.Frame(self.notebook, padx=20, pady=20)
 
-        notebook.add(self.login_frame, text="Đăng nhập")
-        notebook.add(self.register_frame, text="Đăng ký")
-        notebook.pack(expand=True, fill="both")
+        self.notebook.add(self.login_frame, text="Đăng nhập")
+        self.notebook.add(self.register_frame, text="Đăng ký")
+        self.notebook.pack(expand=True, fill="both")
 
         self.build_login_ui()
         self.build_register_ui()
@@ -32,6 +32,10 @@ class LoginRegisterApp:
         tk.Button(self.login_frame, text="Đăng nhập", command=self.login).pack(pady=10)
 
     def build_register_ui(self):
+        tk.Label(self.register_frame, text="Email:").pack()
+        self.reg_mail = tk.Entry(self.register_frame, width=30)
+        self.reg_mail.pack(pady=5)
+
         tk.Label(self.register_frame, text="Tên đăng nhập:").pack()
         self.reg_username = tk.Entry(self.register_frame, width=30)
         self.reg_username.pack(pady=5)
@@ -40,9 +44,9 @@ class LoginRegisterApp:
         self.reg_password = tk.Entry(self.register_frame, show="*", width=30)
         self.reg_password.pack(pady=5)
 
-        tk.Label(self.register_frame, text="Email:").pack()
-        self.reg_mail = tk.Entry(self.register_frame, width=30)
-        self.reg_mail.pack(pady=5)
+        tk.Label(self.register_frame, text="Nhập lại mat khau:").pack()
+        self.reg_confirm_password = tk.Entry(self.register_frame, show="*", width=30)
+        self.reg_confirm_password.pack(pady=5)
 
         tk.Button(self.register_frame, text="Đăng ký", command=self.register).pack(pady=10)
 
@@ -68,14 +72,28 @@ class LoginRegisterApp:
     def register(self):
         username = self.reg_username.get()
         password = self.reg_password.get()
+        confirm_password = self.reg_confirm_password.get()
         mail = self.reg_mail.get()
 
         if not username or not password or not mail:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng điền đầy đủ các trường.")
             return
 
-        success = self.manager.add_user(username, password, mail)
+        if password != confirm_password:
+            messagebox.showwarning("Lỗi", "Mật khóa không khớp nhau.")
+            return
+
+        success = self.manager.add_user(username, password, confirm_password, mail)
         if success:
             messagebox.showinfo("Thành công", "Đăng ký thành công.")
+            self.login_username.delete(0, tk.END)
+            self.login_password.delete(0, tk.END)
+            self.reg_mail.delete(0, tk.END)
+            self.reg_username.delete(0, tk.END)
+            self.reg_password.delete(0, tk.END)
+            self.reg_confirm_password.delete(0, tk.END)
+
+            self.notebook.select(self.login_frame)
+
         else:
             messagebox.showerror("Lỗi", "Người dùng đã tồn tại.")
