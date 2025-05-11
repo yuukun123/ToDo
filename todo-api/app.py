@@ -23,11 +23,29 @@ def register():
     req = request.json
     username = req.get("username")
     password = req.get("password")
+    confirm_password = req.get("confirm_password")
+    mail = req.get("mail")
+
+    if not all([username, password, confirm_password, mail]):
+        return jsonify({"message": "Missing required fields"}), 400
 
     if username in data:
         return jsonify({"message": "Username exists"}), 400
 
-    data[username] = {"password": password, "todos": []}
+    if password != confirm_password:
+        return jsonify({"message": "Passwords do not match"}), 400
+
+    # ✅ Thêm user với thông tin đầy đủ
+    data[username] = {
+        "password": password,
+        "confirm_password": confirm_password,
+        "mail": mail,
+        "role": "customer",
+        "status": "active",
+        "online": "",
+        "todos": []
+    }
+
     save_data(data)
     return jsonify({"message": "User registered"}), 201
 
@@ -35,10 +53,47 @@ def register():
 def login():
     data = load_data()
     req = request.json
-    user = data.get(req.get("username"))
-    if user and user["password"] == req.get("password"):
-        return jsonify({"message": "Login successful"}), 200
+    username = req.get("username")
+    password = req.get("password")
+
+    user = data.get(username)
+    if user and user["password"] == password:
+        if user.get("role") != "customer":
+            return jsonify({"message": "Only customer role can log in"}), 403
+        if user.get("status") == "banned":
+            return jsonify({"message": "Account is not active"}), 403
+
+        user["online"] = "online"
+        save_data(data)
+        return jsonify({
+            "message": "Login successful",
+            "username": username,
+            "todos": user["todos"]
+        }), 200
+
     return jsonify({"message": "Invalid credentials"}), 401
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    data = load_data()
+    req = request.json
+    username = req.get("username")
+
+    print(f"[BACKEND] Yêu cầu logout từ: {username}")
+
+    if username in data:
+        data[username]["online"] = ""
+        save_data(data)
+        print(f"[BACKEND] {username} đã logout.")
+        return jsonify({"message": "Logout successful"}), 200
+
+    return jsonify({"message": "User not found"}), 404
+
+
+@app.route("/users", methods=["GET"])
+def list_users():
+    data = load_data()
+    return jsonify(data), 200
 
 @app.route("/todos/<username>", methods=["GET", "POST", "PUT"])
 def todos(username):
@@ -73,5 +128,19 @@ def todos(username):
         else:
             return jsonify({"message": "Todo not found"}), 404
 
+# ✅ Hàm kiểm tra dữ liệu người dùng hợp lệ
+def validate_users(data):
+    required_fields = {"password", "confirm_password", "mail", "role", "status", "online", "todos"}
+    for username, info in data.items():
+        missing = required_fields - info.keys()
+        if missing:
+            print(f"[ERROR] User '{username}' thiếu trường: {missing}")
+        else:
+            print(f"[OK] User '{username}' đầy đủ.")
+
 if __name__ == "__main__":
+    # Debug hiển thị trạng thái dữ liệu
+    print("[DEBUG] Kiểm tra dữ liệu users.json:")
+    validate_users(load_data())
+
     app.run(debug=True)

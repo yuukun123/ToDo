@@ -44,7 +44,7 @@ class LoginRegisterApp:
         self.reg_password = tk.Entry(self.register_frame, show="*", width=30)
         self.reg_password.pack(pady=5)
 
-        tk.Label(self.register_frame, text="Nhập lại mat khau:").pack()
+        tk.Label(self.register_frame, text="Nhập lại mật khẩu:").pack()
         self.reg_confirm_password = tk.Entry(self.register_frame, show="*", width=30)
         self.reg_confirm_password.pack(pady=5)
 
@@ -54,22 +54,40 @@ class LoginRegisterApp:
         username = self.login_username.get()
         password = self.login_password.get()
 
-        if api_client.login_user(username, password):
+        if not username or not password:
+            messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập tên đăng nhập và mật khẩu.")
+            return
+
+        response = api_client.login_user(username, password)
+        status = response["status"]
+        message = response["data"].get("message", "")
+
+        if status == 200:
             messagebox.showinfo("Thành công", f"Chào mừng, {username}!")
-
             self.root.destroy()
-
             new_root = tk.Tk()
             app = TodoApp(new_root, username)
             new_root.mainloop()
+
+        elif status == 403:
+            if message == "Only customer role can log in":
+                messagebox.showerror("Từ chối đăng nhập", "Tài khoản không phải vai trò khách hàng.")
+            elif message == "Account is not active":
+                messagebox.showerror("Từ chối đăng nhập", "Tài khoản đã bị khóa.")
+            else:
+                messagebox.showerror("Từ chối đăng nhập", message)
+
+        elif status == 401:
+            messagebox.showerror("Sai thông tin", "Tên đăng nhập hoặc mật khẩu không đúng.")
+
         else:
-            messagebox.showerror("Lỗi", "Sai tên đăng nhập hoặc mật khẩu.")
+            messagebox.showerror("Lỗi hệ thống", f"Lỗi không xác định: {message}")
 
     def register(self):
         username = self.reg_username.get()
         password = self.reg_password.get()
         confirm_password = self.reg_confirm_password.get()
-        mail = self.reg_mail.get()  # Bạn có thể lưu vào Flask nếu mở rộng schema sau
+        mail = self.reg_mail.get()
 
         if not username or not password or not mail:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng điền đầy đủ các trường.")
@@ -79,16 +97,17 @@ class LoginRegisterApp:
             messagebox.showwarning("Lỗi", "Mật khẩu không khớp nhau.")
             return
 
-        if api_client.register_user(username, password):
+        if api_client.register_user(username, password, confirm_password, mail):
             messagebox.showinfo("Thành công", "Tạo tài khoản thành công.")
-            self.login_username.delete(0, tk.END)
-            self.login_password.delete(0, tk.END)
-            self.reg_mail.delete(0, tk.END)
-            self.reg_username.delete(0, tk.END)
-            self.reg_password.delete(0, tk.END)
-            self.reg_confirm_password.delete(0, tk.END)
-
+            self.clear_fields()
             self.notebook.select(self.login_frame)
         else:
             messagebox.showerror("Lỗi", "Tên người dùng đã tồn tại.")
 
+    def clear_fields(self):
+        self.login_username.delete(0, tk.END)
+        self.login_password.delete(0, tk.END)
+        self.reg_mail.delete(0, tk.END)
+        self.reg_username.delete(0, tk.END)
+        self.reg_password.delete(0, tk.END)
+        self.reg_confirm_password.delete(0, tk.END)

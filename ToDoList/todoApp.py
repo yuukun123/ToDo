@@ -12,6 +12,17 @@ class TodoApp:
 
         self.todos = api_client.get_todos(username)
 
+        # Header với thông tin người dùng và nút logout
+        self.header_frame = tk.Frame(self.root)
+        self.header_frame.pack(padx=10, pady=(10, 0), fill='x')
+
+        self.user_label = tk.Label(self.header_frame, text=f"👤 Logged in as: {self.username}", anchor='w')
+        self.user_label.pack(side=tk.LEFT)
+
+        self.logout_button = tk.Button(self.header_frame, text="🔓 Logout", command=self.logout)
+        self.logout_button.pack(side=tk.RIGHT)
+
+        # Sau đó mới pack phần nội dung chính
         self.frame = tk.Frame(self.root)
         self.frame.pack(padx=10, pady=10)
 
@@ -57,6 +68,11 @@ class TodoApp:
 
 
         self.refresh_list()
+
+    # def on_close(self):
+    #     if messagebox.askokcancel("Thoát", "Bạn có chắc muốn thoát?"):
+    #         api_client.logout_user(self.username)
+    #         self.root.destroy()
 
     def add_task(self):
         title = self.title_entry.get()
@@ -108,14 +124,24 @@ class TodoApp:
         if text.strip().startswith("↳"):
             return
 
+        # Nếu đã mở mô tả cho task này → đóng lại
         if index + 2 < self.listbox.size():
             next_line = self.listbox.get(index + 1)
             next_next_line = self.listbox.get(index + 2)
             if next_line.strip().startswith("↳") and next_next_line.strip().startswith("↳"):
                 self.listbox.delete(index + 1)
                 self.listbox.delete(index + 1)
-                return
+                return  # ⛔ Không mở lại nữa
 
+        # Trước khi mở mô tả mới → xóa mô tả cũ nếu còn sót
+        to_delete = []
+        for i in range(self.listbox.size()):
+            if self.listbox.get(i).strip().startswith("↳"):
+                to_delete.append(i)
+        for i in reversed(to_delete):
+            self.listbox.delete(i)
+
+        # Hiển thị mô tả cho task hiện tại
         if index < len(self.todos):
             task_info = self.todos[index].get("title", {})
             description_line = f"   ↳ Description: {task_info.get('description', '')}"
@@ -168,3 +194,19 @@ class TodoApp:
             self.refresh_list()
         else:
             messagebox.showerror("Lỗi", "Không thể cập nhật trạng thái.")
+
+    def logout(self):
+        confirm = messagebox.askyesno("Logout", "Bạn có chắc chắn muốn đăng xuất?")
+        if confirm:
+            api_client.logout_user(self.username) # Gọi API logout
+
+            self.root.destroy()
+
+            # Quay lại màn hình đăng nhập
+            import tkinter as tk
+            from manageUser import manageUser
+            from userApp import LoginRegisterApp
+
+            new_root = tk.Tk()
+            app = LoginRegisterApp(new_root, manageUser())
+            new_root.mainloop()
