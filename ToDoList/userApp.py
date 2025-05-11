@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from manageUser import manageUser
 from todoApp import TodoApp
+import api_client
 
 class LoginRegisterApp:
     def __init__(self, root, manager):
@@ -53,15 +53,11 @@ class LoginRegisterApp:
     def login(self):
         username = self.login_username.get()
         password = self.login_password.get()
-        if self.manager.check_login(username, password):
+
+        if api_client.login_user(username, password):
             messagebox.showinfo("Thành công", f"Chào mừng, {username}!")
 
-            # Đóng giao diện login
             self.root.destroy()
-
-            # Tạo cửa sổ mới và chạy TodoApp
-            import tkinter as tk
-            from todoApp import TodoApp
 
             new_root = tk.Tk()
             app = TodoApp(new_root, username)
@@ -73,19 +69,18 @@ class LoginRegisterApp:
         username = self.reg_username.get()
         password = self.reg_password.get()
         confirm_password = self.reg_confirm_password.get()
-        mail = self.reg_mail.get()
+        mail = self.reg_mail.get()  # Bạn có thể lưu vào Flask nếu mở rộng schema sau
 
         if not username or not password or not mail:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng điền đầy đủ các trường.")
             return
 
         if password != confirm_password:
-            messagebox.showwarning("Lỗi", "Mật khóa không khớp nhau.")
+            messagebox.showwarning("Lỗi", "Mật khẩu không khớp nhau.")
             return
 
-        success = self.manager.add_user(username, password, confirm_password, mail)
-        if success:
-            messagebox.showinfo("Thành công", "Đăng ký thành công.")
+        if api_client.register_user(username, password):
+            messagebox.showinfo("Thành công", "Tạo tài khoản thành công.")
             self.login_username.delete(0, tk.END)
             self.login_password.delete(0, tk.END)
             self.reg_mail.delete(0, tk.END)
@@ -94,6 +89,6 @@ class LoginRegisterApp:
             self.reg_confirm_password.delete(0, tk.END)
 
             self.notebook.select(self.login_frame)
-
         else:
-            messagebox.showerror("Lỗi", "Người dùng đã tồn tại.")
+            messagebox.showerror("Lỗi", "Tên người dùng đã tồn tại.")
+
