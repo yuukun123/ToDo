@@ -144,3 +144,8 @@ if __name__ == "__main__":
     validate_users(load_data())
 
     app.run(debug=True)
+
+@app.route("/", methods=["GET"])
+def index():
+    return "API server is running. Try /register or /login", 200
+

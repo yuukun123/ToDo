@@ -1,6 +1,6 @@
 import requests
 
-BASE_URL = "http://127.0.0.1:5000"  # ✅ hoặc URL của server bạn
+BASE_URL = "http://yuu.pythonanywhere.com/"  # ✅ hoặc URL của server bạn
 
 def register_user(username, password, confirm_password, mail):
     res = requests.post(f"{BASE_URL}/register", json={
