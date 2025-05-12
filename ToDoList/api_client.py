@@ -36,18 +36,32 @@ def logout_user(username):
 
 def get_todos(username):
     res = requests.get(f"{BASE_URL}/todos/{username}")
-    print("[GET TODOS]", res.status_code, res.json())
-    if res.status_code == 200:
-        return res.json()
+    try:
+        todos = res.json()
+        print("[GET TODOS]", res.status_code, todos)
+        if res.status_code == 200:
+            return todos
+    except ValueError:
+        print("[GET TODOS] ❌ Không thể parse JSON. Response text:", res.text)
     return []
 
-def add_todo(username, title, completed=False):
+
+def add_todo(username, title, hour=0, minute=0, description="", deadline=None, completed=False):
     res = requests.post(f"{BASE_URL}/todos/{username}", json={
         "title": title,
+        "hour": hour,
+        "minute": minute,
+        "description": description,
+        "deadline": deadline,  # phải là chuỗi ISO, ví dụ: "2024-06-01T10:00:00"
         "completed": completed
     })
-    print("[ADD TODO]", res.status_code, res.json())
+    try:
+        response_json = res.json()
+    except ValueError:
+        response_json = {"message": res.text or "❌ Không thể parse JSON"}
+    print("[ADD TODO]", res.status_code, response_json)
     return res.status_code == 201
+
 
 def update_todo(username, todo):
     res = requests.put(f"{BASE_URL}/todos/{username}", json=todo)

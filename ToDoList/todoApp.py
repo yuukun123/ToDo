@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from tkcalendar import DateEntry
+from datetime import datetime  # ✅ Thêm ở đầu file nếu chưa có
 import time
 import api_client
 
@@ -77,41 +78,64 @@ class TodoApp:
     def add_task(self):
         title = self.title_entry.get()
         description = self.description_entry.get()
-        deadline = self.date_entry.get()
-        hour = self.hour_spinbox.get()
-        minute = self.minute_spinbox.get()
+        date_str = self.date_entry.get()
+        hour_str = self.hour_spinbox.get()
+        minute_str = self.minute_spinbox.get()
 
-        if title:
-            todo = {
-                "title": title,
-                "description": description,
-                "deadline": deadline,
-                "hour": hour,
-                "minute": minute,
-                "completed": False
-            }
-            success = api_client.add_todo(self.username, todo)
-            if success:
-                self.todos = api_client.get_todos(self.username)
-                self.refresh_list()
-                self.title_entry.delete(0, tk.END)
-                self.description_entry.delete(0, tk.END)
-                self.hour_spinbox.delete(0, tk.END)
-                self.hour_spinbox.insert(0, "00")
-                self.minute_spinbox.delete(0, tk.END)
-                self.minute_spinbox.insert(0, "00")
-            else:
-                messagebox.showerror("Lỗi", "Không thể thêm task.")
-        else:
+        if not title:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập tên task.")
+            return
+
+        try:
+            # ✅ Chuyển thành định dạng ISO chuẩn cho deadline
+            deadline_obj = datetime.strptime(f"{date_str} {hour_str}:{minute_str}", "%d-%m-%Y %H:%M")
+            deadline_iso = deadline_obj.isoformat()
+        except ValueError:
+            messagebox.showerror("Lỗi", "Ngày hoặc giờ không hợp lệ.")
+            return
+
+        # ✅ Gửi sang server
+        success = api_client.add_todo(
+            self.username,
+            title=title,
+            hour=int(hour_str),
+            minute=int(minute_str),
+            description=description,
+            deadline=deadline_iso,
+            completed=False
+        )
+
+        if success:
+            self.todos = api_client.get_todos(self.username)
+            self.refresh_list()
+            self.title_entry.delete(0, tk.END)
+            self.description_entry.delete(0, tk.END)
+            self.hour_spinbox.delete(0, tk.END)
+            self.hour_spinbox.insert(0, "00")
+            self.minute_spinbox.delete(0, tk.END)
+            self.minute_spinbox.insert(0, "00")
+        else:
+            messagebox.showerror("Lỗi", "Không thể thêm task.")
 
     def refresh_list(self):
         self.listbox.delete(0, tk.END)
         for todo in self.todos:
-            task_info = todo.get("title", {})
-            title_str = task_info.get("title", "")
+            title_str = todo.get("title", "")
             status = "[✔]" if todo.get("completed") else "[ ]"
-            time_str = f" ({todo.get('completed_at')})" if todo.get("completed_at") else ""
+
+            completed_at = todo.get("completed_at")
+            if completed_at:
+                try:
+                    # ⚠️ Đảm bảo completed_at là chuỗi dạng ISO có thể parse
+                    dt = datetime.fromisoformat(completed_at.replace("Z", ""))
+                    formatted_time = dt.strftime("%d-%m-%Y %H:%M")
+                except Exception as e:
+                    print(f"[DEBUG] Error parsing completed_at: {e}")
+                    formatted_time = completed_at.replace("T", " ")
+                time_str = f" ({formatted_time})"
+            else:
+                time_str = ""
+
             self.listbox.insert(tk.END, f"{status} {title_str}{time_str}")
 
     def show_description(self, event):
@@ -131,23 +155,23 @@ class TodoApp:
             if next_line.strip().startswith("↳") and next_next_line.strip().startswith("↳"):
                 self.listbox.delete(index + 1)
                 self.listbox.delete(index + 1)
-                return  # ⛔ Không mở lại nữa
+                return
 
-        # Trước khi mở mô tả mới → xóa mô tả cũ nếu còn sót
-        to_delete = []
-        for i in range(self.listbox.size()):
-            if self.listbox.get(i).strip().startswith("↳"):
-                to_delete.append(i)
+        # Xóa mô tả cũ
+        to_delete = [i for i in range(self.listbox.size()) if self.listbox.get(i).strip().startswith("↳")]
         for i in reversed(to_delete):
             self.listbox.delete(i)
 
         # Hiển thị mô tả cho task hiện tại
         if index < len(self.todos):
-            task_info = self.todos[index].get("title", {})
-            description_line = f"   ↳ Description: {task_info.get('description', '')}"
-            deadline_line = f"   ↳ Deadline: {task_info.get('deadline', '')} | {task_info.get('hour', '00')}:{task_info.get('minute', '00')}"
-            self.listbox.insert(index + 1, description_line)
-            self.listbox.insert(index + 2, deadline_line)
+            task = self.todos[index]
+            description = task.get('description', '')
+            deadline = task.get('deadline', '').replace("T", " ")  # ✅ Bỏ T
+            hour = str(task.get('hour', '00')).zfill(2)
+            minute = str(task.get('minute', '00')).zfill(2)
+
+            self.listbox.insert(index + 1, f"   ↳ Description: {description}")
+            self.listbox.insert(index + 2, f"   ↳ Deadline: {deadline} | {hour}:{minute}")
 
     def compare_time(self, todo):
         current_time = time.time()

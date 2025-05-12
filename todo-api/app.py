@@ -1,25 +1,27 @@
 from flask import Flask, request, jsonify
-import json
-import os
+import mysql.connector
+from datetime import datetime
 
 app = Flask(__name__)
-DATA_FILE = "users.json"
 
-# Tải dữ liệu từ file
-def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {}
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+# ⚙️ Cấu hình kết nối MySQL
+db_config = {
+    "host": "yuu.mysql.pythonanywhere-services.com",
+    "user": "yuu",
+    "password": "170105@Phong",
+    "database": "yuu$todo"
+}
 
-# Lưu dữ liệu xuống file
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+def get_db():
+    return mysql.connector.connect(**db_config)
 
+# 🔒 Chuyển đổi datetime an toàn sang ISO
+def safe_iso(value):
+    return value.isoformat() if isinstance(value, datetime) else None
+
+# Đăng ký người dùng
 @app.route("/register", methods=["POST"])
 def register():
-    data = load_data()
     req = request.json
     username = req.get("username")
     password = req.get("password")
@@ -29,123 +31,160 @@ def register():
     if not all([username, password, confirm_password, mail]):
         return jsonify({"message": "Missing required fields"}), 400
 
-    if username in data:
-        return jsonify({"message": "Username exists"}), 400
-
     if password != confirm_password:
         return jsonify({"message": "Passwords do not match"}), 400
 
-    # ✅ Thêm user với thông tin đầy đủ
-    data[username] = {
-        "password": password,
-        "confirm_password": confirm_password,
-        "mail": mail,
-        "role": "customer",
-        "status": "active",
-        "online": "",
-        "todos": []
-    }
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
 
-    save_data(data)
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({"message": "Username exists"}), 400
+
+    cursor.execute(
+        "INSERT INTO users (username, password, mail, role, status, online) VALUES (%s, %s, %s, %s, %s, %s)",
+        (username, password, mail, "customer", "active", "")
+    )
+    conn.commit()
+    conn.close()
     return jsonify({"message": "User registered"}), 201
 
+# Đăng nhập
 @app.route("/login", methods=["POST"])
 def login():
-    data = load_data()
     req = request.json
     username = req.get("username")
     password = req.get("password")
 
-    user = data.get(username)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
+
     if user and user["password"] == password:
-        if user.get("role") != "customer":
+        if user["role"] != "customer":
+            conn.close()
             return jsonify({"message": "Only customer role can log in"}), 403
-        if user.get("status") == "banned":
+        if user["status"] == "banned":
+            conn.close()
             return jsonify({"message": "Account is not active"}), 403
 
-        user["online"] = "online"
-        save_data(data)
+        cursor.execute("UPDATE users SET online = %s WHERE username = %s", ("online", username))
+        conn.commit()
+        conn.close()
+
         return jsonify({
             "message": "Login successful",
             "username": username,
-            "todos": user["todos"]
+            "todos": []
         }), 200
 
+    conn.close()
     return jsonify({"message": "Invalid credentials"}), 401
 
+# Đăng xuất
 @app.route("/logout", methods=["POST"])
 def logout():
-    data = load_data()
     req = request.json
     username = req.get("username")
 
-    print(f"[BACKEND] Yêu cầu logout từ: {username}")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET online = %s WHERE username = %s", ("", username))
+    conn.commit()
+    conn.close()
 
-    if username in data:
-        data[username]["online"] = ""
-        save_data(data)
-        print(f"[BACKEND] {username} đã logout.")
-        return jsonify({"message": "Logout successful"}), 200
+    return jsonify({"message": "Logout successful"}), 200
 
-    return jsonify({"message": "User not found"}), 404
-
-
+# Danh sách người dùng
 @app.route("/users", methods=["GET"])
 def list_users():
-    data = load_data()
-    return jsonify(data), 200
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT username, mail, role, status, online FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    return jsonify(users), 200
 
+# Quản lý TODOs
 @app.route("/todos/<username>", methods=["GET", "POST", "PUT"])
 def todos(username):
-    data = load_data()
-    if username not in data:
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Kiểm tra user tồn tại
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+    if not cursor.fetchone():
+        conn.close()
         return jsonify({"message": "User not found"}), 404
 
+    # GET: Lấy danh sách todo
     if request.method == "GET":
-        return jsonify(data[username]["todos"])
+        cursor.execute("""
+            SELECT id, title, hour, minute, description, deadline, completed, completed_at
+            FROM todos
+            WHERE username = %s
+        """, (username,))
+        rows = cursor.fetchall()
 
+        todos = []
+        for row in rows:
+            row["deadline"] = safe_iso(row["deadline"])
+            row["completed_at"] = safe_iso(row["completed_at"])
+            todos.append(row)
+
+        conn.close()
+        return jsonify(todos), 200
+
+    # POST: Thêm todo mới
     if request.method == "POST":
         todo = request.json
-        data[username]["todos"].append(todo)
-        save_data(data)
+        title = todo.get("title")
+        hour = todo.get("hour", 0)
+        minute = todo.get("minute", 0)
+        description = todo.get("description", "")
+        deadline_str = todo.get("deadline")
+        completed = todo.get("completed", False)
+
+        deadline = datetime.fromisoformat(deadline_str) if deadline_str else None
+
+        cursor.execute("""
+            INSERT INTO todos (username, title, hour, minute, description, deadline, completed)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (username, title, hour, minute, description, deadline, completed))
+
+        conn.commit()
+        conn.close()
         return jsonify({"message": "Todo added"}), 201
 
+    # PUT: Cập nhật todo
     if request.method == "PUT":
-        todo_update = request.json
-        title = todo_update.get("title")
-        updated = False
+        todo = request.json
+        title = todo.get("title")
+        completed = todo.get("completed", False)
+        completed_at_str = todo.get("completed_at")
+        completed_at = datetime.fromisoformat(completed_at_str) if completed_at_str else None
 
-        for todo in data[username]["todos"]:
-            if todo["title"] == title:
-                todo["completed"] = todo_update.get("completed", todo["completed"])
-                todo["completed_at"] = todo_update.get("completed_at", todo.get("completed_at"))
-                updated = True
-                break
+        cursor.execute("""
+            UPDATE todos
+            SET completed = %s,
+                completed_at = %s
+            WHERE username = %s AND title = %s
+        """, (completed, completed_at, username, title))
 
-        if updated:
-            save_data(data)
-            return jsonify({"message": "Todo updated"}), 200
-        else:
+        conn.commit()
+        if cursor.rowcount == 0:
+            conn.close()
             return jsonify({"message": "Todo not found"}), 404
 
-# ✅ Hàm kiểm tra dữ liệu người dùng hợp lệ
-def validate_users(data):
-    required_fields = {"password", "confirm_password", "mail", "role", "status", "online", "todos"}
-    for username, info in data.items():
-        missing = required_fields - info.keys()
-        if missing:
-            print(f"[ERROR] User '{username}' thiếu trường: {missing}")
-        else:
-            print(f"[OK] User '{username}' đầy đủ.")
+        conn.close()
+        return jsonify({"message": "Todo updated"}), 200
 
-if __name__ == "__main__":
-    # Debug hiển thị trạng thái dữ liệu
-    print("[DEBUG] Kiểm tra dữ liệu users.json:")
-    validate_users(load_data())
-
-    app.run(debug=True)
-
+# Route mặc định
 @app.route("/", methods=["GET"])
 def index():
-    return "API server is running. Try /register or /login", 200
+    return "API server (MySQL version) is running. Try /register or /login", 200
 
+if __name__ == "__main__":
+    app.run(debug=True)

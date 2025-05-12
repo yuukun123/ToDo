@@ -11,13 +11,13 @@ class TodoItem:
         self.completed = completed
         self.completed_at = completed_at
 
-
     def to_dict(self):
-        return {"title": self.title,
-                "hour": self.hour,
-                "minute": self.minute,
-                "description": self.description,
-                "deadline": self.deadline,
-                "completed": self.completed,
-                "completed_at": self.completed_at
-                }
+        return {
+            "title": self.title,
+            "hour": self.hour,
+            "minute": self.minute,
+            "description": self.description,
+            "deadline": self.deadline.isoformat() if self.deadline else None,
+            "completed": self.completed,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None
+        }
