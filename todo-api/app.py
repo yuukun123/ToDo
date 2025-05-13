@@ -127,7 +127,7 @@ def todos(username):
     # GET: Lấy danh sách todo
     if request.method == "GET":
         cursor.execute("""
-            SELECT id, title, hour, minute, description, deadline, completed, completed_at, music
+            SELECT id, title, hour, minute, description, deadline, completed, completed_at, music, lead_time
             FROM todos
             WHERE username = %s
         """, (username,))
@@ -152,13 +152,14 @@ def todos(username):
         deadline_str = todo.get("deadline")
         completed = todo.get("completed", False)
         music = todo.get("music", "")
+        lead_time = todo.get("lead_time", 10)
 
         deadline = datetime.fromisoformat(deadline_str) if deadline_str else None
 
         cursor.execute("""
-            INSERT INTO todos (username, title, hour, minute, description, deadline, completed, music)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (username, title, hour, minute, description, deadline, completed, music))
+            INSERT INTO todos (username, title, hour, minute, description, deadline, completed, music, lead_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (username, title, hour, minute, description, deadline, completed, music, lead_time))
 
         conn.commit()
         conn.close()
@@ -172,14 +173,16 @@ def todos(username):
         completed_at_str = todo.get("completed_at")
         completed_at = datetime.fromisoformat(completed_at_str) if completed_at_str else None
         music = todo.get("music", "")
+        lead_time = todo.get("lead_time", 10)
 
         cursor.execute("""
             UPDATE todos
             SET completed = %s,
                 completed_at = %s,
-                music = %s
+                music = %s,
+                lead_time = %s
             WHERE username = %s AND title = %s
-        """, (completed, completed_at, music, username, title))
+        """, (completed, completed_at, music, lead_time, username, title))
 
         conn.commit()
         if cursor.rowcount == 0:

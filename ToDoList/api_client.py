@@ -47,7 +47,7 @@ def get_todos(username):
     return []
 
 
-def add_todo(username, title, hour=0, minute=0, description="", deadline=None, completed=False, music=""):
+def add_todo(username, title, hour=0, minute=0, description="", deadline=None, completed=False, music="", lead_time=10):
     res = requests.post(f"{BASE_URL}/todos/{username}", json={
         "title": title,
         "hour": hour,
@@ -55,7 +55,8 @@ def add_todo(username, title, hour=0, minute=0, description="", deadline=None, c
         "description": description,
         "deadline": deadline,  # phải là chuỗi ISO, ví dụ: "2024-06-01T10:00:00"
         "completed": completed,
-        "music": music
+        "music": music,
+        "lead_time": lead_time,
     })
     try:
         response_json = res.json()
@@ -78,8 +79,6 @@ def get_music_list(username):
     if res.status_code == 200:
         return res.json()  # Trả về list các path như "/uploads/default/file.mp3"
     return []
-
-
 
 
 def update_todo(username, todo):
