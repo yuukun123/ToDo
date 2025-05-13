@@ -1,16 +1,19 @@
+import os.path
 import tkinter as tk
+from tkinter import filedialog
 from tkinter import messagebox
 from tkcalendar import DateEntry
 from datetime import datetime  # ✅ Thêm ở đầu file nếu chưa có
 import time
 import api_client
+import pygame
+import urllib.parse
 
 class TodoApp:
     def __init__(self, root, username):
         self.root = root
         self.username = username
         self.root.title(f"Todo List - {username}")
-
         self.todos = api_client.get_todos(username)
 
         # Header với thông tin người dùng và nút logout
@@ -27,16 +30,19 @@ class TodoApp:
         self.frame = tk.Frame(self.root)
         self.frame.pack(padx=10, pady=10)
 
+        # nhập tiêu đề
         self.title_label = tk.Label(self.frame, text="Title")
         self.title_label.pack()
         self.title_entry = tk.Entry(self.frame, width=40)
         self.title_entry.pack(pady=5)
 
+        # nhập mô tả công việc
         self.description_label = tk.Label(self.frame, text="Description")
         self.description_label.pack()
         self.description_entry = tk.Entry(self.frame, width=40)
         self.description_entry.pack(pady=5)
 
+        # chọn deadline
         self.Deadline_label = tk.Label(self.frame, text="Deadline")
         self.Deadline_label.pack()
 
@@ -47,6 +53,7 @@ class TodoApp:
                                     foreground='white', borderwidth=2, date_pattern='dd-mm-yyyy')
         self.date_entry.pack(side=tk.LEFT)
 
+        # chọn phút trước thông báo deadline trước bao nhiêu
         self.hour_spinbox = tk.Spinbox(self.day_frame, from_=0, to=23, width=3, format="%02.0f")
         self.hour_spinbox.pack(side=tk.LEFT, padx=(10, 0))
 
@@ -56,6 +63,33 @@ class TodoApp:
         self.minute_spinbox = tk.Spinbox(self.day_frame, from_=0, to=59, width=3, format="%02.0f")
         self.minute_spinbox.pack(side=tk.LEFT)
 
+        # === Mục chọn nhạc ===
+        self.music_label = tk.Label(self.frame, text="Chọn nhạc nhắc nhở:")
+        self.music_label.pack()
+
+        # Lấy danh sách nhạc từ API (bao gồm cả mặc định + nhạc user)
+        all_music_paths = api_client.get_music_list(username)
+        all_music = [os.path.basename(path) for path in all_music_paths]  # chỉ lấy tên file
+
+        # Thêm lựa chọn upload
+        all_music.append("Tùy chọn khác (tải lên...)")
+
+        # Đặt vào OptionMenu
+        self.selected_music = tk.StringVar()
+        self.selected_music.set(all_music[0])  # chọn mục đầu tiên mặc định
+
+        # Tạo khung chứa dropdown + nút nghe thử
+        self.music_frame = tk.Frame(self.frame)
+        self.music_frame.pack(pady=5)
+
+        self.music_menu = tk.OptionMenu(self.music_frame, self.selected_music, *all_music, command=self.handle_music_choice)
+        self.music_menu.pack(side=tk.LEFT)
+
+        # Nút nghe thử nhạc
+        self.play_button = tk.Button(self.music_frame, text="🔊 Nghe thử", command=self.preview_music)
+        self.play_button.pack(side=tk.LEFT, padx=10)
+
+        # nút add task
         self.add_button = tk.Button(self.frame, text="Add Task", command=self.add_task)
         self.add_button.pack(pady=5)
 
@@ -81,6 +115,7 @@ class TodoApp:
         date_str = self.date_entry.get()
         hour_str = self.hour_spinbox.get()
         minute_str = self.minute_spinbox.get()
+        music_path = self.selected_music.get()
 
         if not title:
             messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập tên task.")
@@ -102,7 +137,8 @@ class TodoApp:
             minute=int(minute_str),
             description=description,
             deadline=deadline_iso,
-            completed=False
+            completed=False,
+            music = music_path,
         )
 
         if success:
@@ -173,23 +209,98 @@ class TodoApp:
             self.listbox.insert(index + 1, f"   ↳ Description: {description}")
             self.listbox.insert(index + 2, f"   ↳ Deadline: {deadline} | {hour}:{minute}")
 
+    def play_music(self, file_name):
+        # Ưu tiên tìm trong thư mục local trước
+        user_path = os.path.join("/home/yuu/uploads", self.username, file_name)
+        default_path = os.path.join("/home/yuu/uploads/default", file_name)
+
+        if os.path.exists(user_path):
+            file_path = user_path
+        elif os.path.exists(default_path):
+            file_path = default_path
+        else:
+            print("[ERROR] Không tìm thấy file:", file_name)
+            return
+
+        print(f"[DEBUG] Playing music: {file_path}")
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"[ERROR] Không thể phát nhạc: {e}")
+
+    def preview_music(self):
+        import requests
+
+        selected = self.selected_music.get()
+        if selected == "Tùy chọn khác (tải lên...)":
+            messagebox.showinfo("Thông báo", "Bạn cần chọn một file nhạc cụ thể để nghe thử.")
+            return
+
+        # Tìm đường dẫn gốc từ get_music_list
+        all_music_paths = api_client.get_music_list(self.username)
+        selected_path = None
+        for path in all_music_paths:
+            if path.endswith(f"/{selected}"):
+                selected_path = path
+                break
+
+        if not selected_path:
+            messagebox.showerror("Lỗi", f"Không tìm thấy đường dẫn nhạc cho: {selected}")
+            return
+
+        # Tải file từ server về local
+        # Encode tên file an toàn trong URL
+        encoded_path = urllib.parse.quote(selected_path)
+        server_url = f"http://yuu.pythonanywhere.com{encoded_path}"  # nối path thành URL
+        base_dir = os.path.dirname(__file__)  # thư mục chứa file .py hiện tại
+        local_music_dir = os.path.join(base_dir, "assets", "music_cache")
+
+        os.makedirs(local_music_dir, exist_ok=True)
+        local_file_path = os.path.join(local_music_dir, selected)
+
+        try:
+            r = requests.get(server_url)
+            r.raise_for_status()
+            with open(local_file_path, "wb") as f:
+                f.write(r.content)
+        except Exception as e:
+            print(f"[ERROR] Không thể tải file từ server: {e}")
+            messagebox.showerror("Lỗi", "Không thể tải file nhạc từ server.")
+            return
+
+        # Phát nhạc
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(local_file_path)
+            pygame.mixer.music.play()
+        except Exception as e:
+            print(f"[ERROR] Không thể phát nhạc: {e}")
+            messagebox.showerror("Lỗi", "Không thể phát file nhạc.")
+
     def compare_time(self, todo):
         current_time = time.time()
-        task_info = todo.get("title", {})
-        if not task_info.get("deadline") or task_info.get("hour") is None or task_info.get("minute") is None:
+        deadline_iso = todo.get("deadline")
+        hour = todo.get("hour")
+        minute = todo.get("minute")
+        music_path = todo.get("music", "default1.mp3")
+
+        if not deadline_iso or hour is None or minute is None:
             return
+
         try:
-            hour_str = str(task_info["hour"]).zfill(2)
-            minute_str = str(task_info["minute"]).zfill(2)
-            deadline_str = f"{task_info['deadline']} {hour_str}:{minute_str}"
-            deadline_time = time.mktime(time.strptime(deadline_str, "%d-%m-%Y %H:%M"))
+            deadline_obj = datetime.fromisoformat(deadline_iso)
+            deadline_obj = deadline_obj.replace(hour=int(hour), minute=int(minute))
+            deadline_time = time.mktime(deadline_obj.timetuple())
             time_diff = deadline_time - current_time
             if 0 < time_diff <= 86400:
-                answer = messagebox.askyesno("Reminder", f"Task '{task_info.get('title', '')}' is due in less than 24 hours! Turn off notifications?")
+                answer = messagebox.askyesno("Reminder", f"Task '{todo.get('title', '')}' is due in less than 24 hours! Turn off notifications?")
                 if not answer:
-                    self.root.after(1800000, lambda: self.compare_time(todo))
+                    self.play_music(music_path)
+                    self.root.after(10000, lambda: self.compare_time(todo))
         except Exception as e:
-            print(f"[ERROR] Failed to parse deadline for task '{task_info.get('title', '')}': {e}")
+            print(f"[ERROR] Failed to parse deadline for task '{todo.get('title', '')}': {e}")
 
     def toggle_task(self):
         index = self.listbox.curselection()
@@ -218,6 +329,25 @@ class TodoApp:
             self.refresh_list()
         else:
             messagebox.showerror("Lỗi", "Không thể cập nhật trạng thái.")
+
+    def handle_music_choice(self, choice):
+        if "Tùy chọn" in choice:
+            file_path = filedialog.askopenfilename(
+                title="Chọn file nhạc MP3",
+                filetypes=[("MP3 Files", "*.mp3")]
+            )
+            if file_path:
+                max_size_mb = 3
+                file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+
+                if file_size_mb > max_size_mb:
+                    messagebox.showwarning("Lớn hơn 3MB", "Vui lặng chọn file nhạc khỏ hơn 3MB.")
+                    self.selected_music.set(self.music_options[0])
+                    return
+
+                self.selected_music.set(file_path)
+            else:
+                self.selected_music.set(self.music_options[0])  # Quay lại default nếu người dùng cancel
 
     def logout(self):
         confirm = messagebox.askyesno("Logout", "Bạn có chắc chắn muốn đăng xuất?")
