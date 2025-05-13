@@ -86,7 +86,7 @@ class TodoApp:
 
             confirm = messagebox.askyesno("Xác nhận", f"Bạn có muốn xóa task '{title_task}' không?")
             if confirm:
-                success = api_client.delete_todo(self.username, title_task)  # ✅ Gửi yêu cầu xóa
+                success = api_client.delete_todo(self.username, {"title": title_task})  # ✅ Gửi yêu cầu xóa
 
                 if success:
                     del self.todos[index]
