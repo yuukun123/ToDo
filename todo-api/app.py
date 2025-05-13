@@ -1,8 +1,13 @@
 from flask import Flask, request, jsonify
 import mysql.connector
 from datetime import datetime
+import os
+from flask import send_from_directory
 
 app = Flask(__name__)
+
+UPLOAD_ROOT = os.path.expanduser("~/uploads")
+MAX_MUSIC_SIZE_MB = 5
 
 # ⚙️ Cấu hình kết nối MySQL
 db_config = {
@@ -108,7 +113,7 @@ def list_users():
     return jsonify(users), 200
 
 # Quản lý TODOs
-@app.route("/todos/<username>", methods=["GET", "POST", "PUT", "DELETE"])
+@app.route("/todos/<username>", methods=["GET", "POST", "PUT"])
 def todos(username):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -122,7 +127,7 @@ def todos(username):
     # GET: Lấy danh sách todo
     if request.method == "GET":
         cursor.execute("""
-            SELECT id, title, hour, minute, description, deadline, completed, completed_at
+            SELECT id, title, hour, minute, description, deadline, completed, completed_at, music, lead_time
             FROM todos
             WHERE username = %s
         """, (username,))
@@ -146,13 +151,15 @@ def todos(username):
         description = todo.get("description", "")
         deadline_str = todo.get("deadline")
         completed = todo.get("completed", False)
+        music = todo.get("music", "")
+        lead_time = todo.get("lead_time", 10)
 
         deadline = datetime.fromisoformat(deadline_str) if deadline_str else None
 
         cursor.execute("""
-            INSERT INTO todos (username, title, hour, minute, description, deadline, completed)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (username, title, hour, minute, description, deadline, completed))
+            INSERT INTO todos (username, title, hour, minute, description, deadline, completed, music, lead_time)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (username, title, hour, minute, description, deadline, completed, music, lead_time))
 
         conn.commit()
         conn.close()
@@ -165,13 +172,17 @@ def todos(username):
         completed = todo.get("completed", False)
         completed_at_str = todo.get("completed_at")
         completed_at = datetime.fromisoformat(completed_at_str) if completed_at_str else None
+        music = todo.get("music", "")
+        lead_time = todo.get("lead_time", 10)
 
         cursor.execute("""
             UPDATE todos
             SET completed = %s,
-                completed_at = %s
+                completed_at = %s,
+                music = %s,
+                lead_time = %s
             WHERE username = %s AND title = %s
-        """, (completed, completed_at, username, title))
+        """, (completed, completed_at, music, lead_time, username, title))
 
         conn.commit()
         if cursor.rowcount == 0:
@@ -180,26 +191,64 @@ def todos(username):
 
         conn.close()
         return jsonify({"message": "Todo updated"}), 200
-    if request.method == "DELETE":
-        todo = request.json
-        title = todo.get("title")
-        if not title:
-            conn.close()
-            return jsonify({"message": "Missing title"}), 400
-        cursor.execute("""
-        DELETE FROM todos
-        WHERE username = %s AND title = %s
-        """, (username, title))
 
-        conn.commit()
-        if cursor.rowcount == 0:
-            conn.close()
-            return jsonify({"message": "Todo not found"}), 404
+@app.route("/upload-music/<username>", methods=["POST"])
+def upload_music(username):
+    if "file" not in request.files:
+        return jsonify({"message": "No file uploaded"}), 400
 
-        conn.close()
-        return jsonify({"message": "Todo deleted"}), 200
+    ALLOWED_EXTENSIONS = {"mp3", "wav"}
 
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"message": "Empty filename"}), 400
 
+    # ✅ Kiểm tra định dạng
+    if not file.filename.lower().rsplit(".", 1)[-1] in ALLOWED_EXTENSIONS:
+        return jsonify({"message": "Unsupported file type"}), 400
+
+    # Giới hạn dung lượng file
+    file.seek(0, os.SEEK_END)
+    file_length = file.tell()
+    if file_length > MAX_MUSIC_SIZE_MB * 1024 * 1024:
+        return jsonify({"message": "File too large"}), 400
+    file.seek(0)
+
+    # Đường dẫn riêng theo user
+    user_folder = os.path.join(UPLOAD_ROOT, username)
+    os.makedirs(user_folder, exist_ok=True)
+
+    filepath = os.path.join(user_folder, file.filename)
+    file.save(filepath)
+
+    return jsonify({"message": "File uploaded", "path": f"/uploads/{username}/{file.filename}"}), 200
+
+@app.route("/music/<username>", methods=["GET"])
+def list_music(username):
+    user_folder = os.path.join(UPLOAD_ROOT, username)
+    default_folder = os.path.join(UPLOAD_ROOT, "default")
+
+    music_list = []
+
+    # Nhạc hệ thống
+    if os.path.exists(default_folder):
+        music_list.extend([f"/uploads/default/{f}" for f in os.listdir(default_folder)])
+
+    # Nhạc người dùng
+    if os.path.exists(user_folder):
+        music_list.extend([f"/uploads/{username}/{f}" for f in os.listdir(user_folder)])
+
+    return jsonify(music_list), 200
+
+@app.route('/uploads/<username>/<filename>')
+def serve_user_music(username, filename):
+    folder = os.path.join(UPLOAD_ROOT, username)
+    return send_from_directory(folder, filename)
+
+@app.route('/uploads/default/<filename>')
+def serve_default_music(filename):
+    folder = os.path.join(UPLOAD_ROOT, "default")
+    return send_from_directory(folder, filename)
 
 # Route mặc định
 @app.route("/", methods=["GET"])

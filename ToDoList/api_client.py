@@ -1,6 +1,7 @@
 import requests
+from pycparser.ply.lex import TOKEN
 
-BASE_URL = "http://yuu.pythonanywhere.com"  # ✅ hoặc URL của server bạn
+BASE_URL = "http://yuu.pythonanywhere.com/"  # ✅ hoặc URL của server bạn
 
 def register_user(username, password, confirm_password, mail):
     res = requests.post(f"{BASE_URL}/register", json={
@@ -46,14 +47,16 @@ def get_todos(username):
     return []
 
 
-def add_todo(username, title, hour=0, minute=0, description="", deadline=None, completed=False):
+def add_todo(username, title, hour=0, minute=0, description="", deadline=None, completed=False, music="", lead_time=10):
     res = requests.post(f"{BASE_URL}/todos/{username}", json={
         "title": title,
         "hour": hour,
         "minute": minute,
         "description": description,
         "deadline": deadline,  # phải là chuỗi ISO, ví dụ: "2024-06-01T10:00:00"
-        "completed": completed
+        "completed": completed,
+        "music": music,
+        "lead_time": lead_time,
     })
     try:
         response_json = res.json()
@@ -62,24 +65,25 @@ def add_todo(username, title, hour=0, minute=0, description="", deadline=None, c
     print("[ADD TODO]", res.status_code, response_json)
     return res.status_code == 201
 
-def delete_todo(username, todo):
-    url = f"{BASE_URL}/todos/{username}"
-    print("========== DELETE TODO ==========")
-    print("Username:", username)
-    print("API URL:", url)
-    print("Payload (todo):", todo)
+def upload_music(username, file_path):
+    with open(file_path, "rb") as f:
+        files = {"file": (file_path.split("/")[-1], f)}
+        res = requests.post(f"{BASE_URL}/upload-music/{username}", files=files)
+        try:
+            return res.status_code, res.json()
+        except:
+            return res.status_code, {"message": res.text}
 
-    try:
-        res = requests.delete(url, json=todo)
-        print("Status Code:", res.status_code)
-        print("Response JSON:", res.json())
-        print("=================================\n")
-        return res.status_code == 200
-    except Exception as e:
-        print("❌ Error during DELETE request:", e)
-        return False
+def get_music_list(username):
+    res = requests.get(f"{BASE_URL}/music/{username}")
+    if res.status_code == 200:
+        return res.json()  # Trả về list các path như "/uploads/default/file.mp3"
+    return []
+
 
 def update_todo(username, todo):
     res = requests.put(f"{BASE_URL}/todos/{username}", json=todo)
     print("[UPDATE TODO]", res.status_code, res.json())
     return res.status_code == 200
+
+
