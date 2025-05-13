@@ -65,6 +65,9 @@ class TodoApp:
         self.toggle_button = tk.Button(self.frame, text="✅ Toggle Completed", command=self.toggle_task)
         self.toggle_button.pack(pady=5)
 
+        self.delete_button = tk.Button(self.frame, text="❎Delete Task", command=self.delete_task)
+        self.delete_button.pack(pady=5)
+
         self.listbox.bind("<<ListboxSelect>>", self.show_description)
 
 
@@ -74,6 +77,24 @@ class TodoApp:
     #     if messagebox.askokcancel("Thoát", "Bạn có chắc muốn thoát?"):
     #         api_client.logout_user(self.username)
     #         self.root.destroy()
+    def delete_task(self):
+        selected = self.listbox.curselection()
+        if selected:
+            index = selected[0]
+            task = self.todos[index]
+            title_task = task.get("title")  # ✅ Lấy tên task
+
+            confirm = messagebox.askyesno("Xác nhận", f"Bạn có muốn xóa task '{title_task}' không?")
+            if confirm:
+                success = api_client.delete_todo(self.username, title_task)  # ✅ Gửi yêu cầu xóa
+
+                if success:
+                    del self.todos[index]
+                    self.listbox.delete(index)
+                    messagebox.showinfo("Thành công", f"Đã xóa task '{title_task}'")
+                else:
+                    messagebox.showerror("Lỗi", "Không thể xóa task.")
+
 
     def add_task(self):
         title = self.title_entry.get()

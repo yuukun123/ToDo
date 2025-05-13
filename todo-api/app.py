@@ -108,7 +108,7 @@ def list_users():
     return jsonify(users), 200
 
 # Quản lý TODOs
-@app.route("/todos/<username>", methods=["GET", "POST", "PUT"])
+@app.route("/todos/<username>", methods=["GET", "POST", "PUT", "DELETE"])
 def todos(username):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -180,6 +180,26 @@ def todos(username):
 
         conn.close()
         return jsonify({"message": "Todo updated"}), 200
+    if request.method == "DELETE":
+        todo = request.json
+        title = todo.get("title")
+        if not title:
+            conn.close()
+            return jsonify({"message": "Missing title"}), 400
+        cursor.execute("""
+        DELETE FROM todos
+        WHERE username = %s AND title = %s
+        """, (username, title))
+
+        conn.commit()
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"message": "Todo not found"}), 404
+
+        conn.close()
+        return jsonify({"message": "Todo deleted"}), 200
+
+
 
 # Route mặc định
 @app.route("/", methods=["GET"])

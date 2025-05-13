@@ -1,6 +1,6 @@
 import requests
 
-BASE_URL = "http://yuu.pythonanywhere.com/"  # ✅ hoặc URL của server bạn
+BASE_URL = "http://yuu.pythonanywhere.com"  # ✅ hoặc URL của server bạn
 
 def register_user(username, password, confirm_password, mail):
     res = requests.post(f"{BASE_URL}/register", json={
@@ -62,6 +62,22 @@ def add_todo(username, title, hour=0, minute=0, description="", deadline=None, c
     print("[ADD TODO]", res.status_code, response_json)
     return res.status_code == 201
 
+def delete_todo(username, todo):
+    url = f"{BASE_URL}/todos/{username}"
+    print("========== DELETE TODO ==========")
+    print("Username:", username)
+    print("API URL:", url)
+    print("Payload (todo):", todo)
+
+    try:
+        res = requests.delete(url, json=todo)
+        print("Status Code:", res.status_code)
+        print("Response JSON:", res.json())
+        print("=================================\n")
+        return res.status_code == 200
+    except Exception as e:
+        print("❌ Error during DELETE request:", e)
+        return False
 
 def update_todo(username, todo):
     res = requests.put(f"{BASE_URL}/todos/{username}", json=todo)
