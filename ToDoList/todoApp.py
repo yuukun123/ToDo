@@ -3,12 +3,13 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
 from tkcalendar import DateEntry
-from datetime import datetime  # ✅ Thêm ở đầu file nếu chưa có
+from datetime import datetime, timedelta
 import time
 import api_client
 import pygame
 import urllib.parse
 import requests
+from threading import Timer
 
 class TodoApp:
     def __init__(self, root, username):
@@ -16,8 +17,11 @@ class TodoApp:
         self.username = username
         self.root.title(f"Todo List - {username}")
         self.todos = api_client.get_todos(username)
-
+        self.reminded_tasks = set()  # ✅ Tránh nhắc lại trùng
+        self.task_creation_times = {}
         self.check_all_deadlines()
+
+        self.answered_flags = {}  # ✅ lưu trạng thái trả lời của từng task
 
         # Header với thông tin người dùng và nút logout
         self.header_frame = tk.Frame(self.root)
@@ -117,6 +121,11 @@ class TodoApp:
 
         self.listbox.bind("<<ListboxSelect>>", self.show_description)
 
+        try:
+            pygame.mixer.init()
+        except Exception as e:
+            print(f"[ERROR] Không thể khởi tạo pygame mixer: {e}")
+
 
         self.refresh_list()
 
@@ -124,6 +133,45 @@ class TodoApp:
     #     if messagebox.askokcancel("Thoát", "Bạn có chắc muốn thoát?"):
     #         api_client.logout_user(self.username)
     #         self.root.destroy()
+
+    def show_auto_closing_dialog(self, title, message, on_yes, on_no, timeout=300000):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.geometry("400x180")
+        dialog.resizable(False, False)
+        dialog.grab_set()
+
+        label = tk.Label(dialog, text=message, wraplength=360, justify='left')
+        label.pack(padx=20, pady=20)
+
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(pady=(0, 20))
+
+        responded = {"value": False}  # Dùng dict để thay đổi được bên trong scope
+
+        def yes_clicked():
+            responded["value"] = True
+            dialog.destroy()
+            on_yes()
+
+        def no_clicked():
+            responded["value"] = True
+            dialog.destroy()
+            on_no(manual=True)
+
+        yes_button = tk.Button(button_frame, text="Yes", width=10, command=yes_clicked)
+        yes_button.pack(side=tk.LEFT, padx=10)
+
+        no_button = tk.Button(button_frame, text="No", width=10, command=no_clicked)
+        no_button.pack(side=tk.LEFT, padx=10)
+
+        def on_timeout():
+            if not responded["value"]:
+                print("[AUTO] Timeout, không có phản hồi")
+                dialog.destroy()
+                on_no(manual=False)
+
+        dialog.after(timeout, on_timeout)
 
     def add_task(self):
         title = self.title_entry.get()
@@ -159,6 +207,12 @@ class TodoApp:
 
         if success:
             self.todos = api_client.get_todos(self.username)
+            # 🕒 Ghi lại thời điểm tạo task để không nhắc liền
+            for todo in self.todos:
+                if todo.get("title") == title:
+                    todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
+                    self.task_creation_times[todo_id] = datetime.now()
+
             self.refresh_list()
             self.title_entry.delete(0, tk.END)
             self.description_entry.delete(0, tk.END)
@@ -308,7 +362,11 @@ class TodoApp:
             print(f"[ERROR] Không thể dừng nhạc: {e}")
 
     def compare_time(self, todo):
-        current_time = time.time()
+        todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
+        if todo_id in self.reminded_tasks:
+            print(f"[SKIP] Task '{todo.get('title')}' đã được nhắc rồi.")
+            return
+
         deadline_iso = todo.get("deadline")
         hour = todo.get("hour")
         minute = todo.get("minute")
@@ -318,13 +376,17 @@ class TodoApp:
             return
 
         try:
-            deadline_obj = datetime.fromisoformat(deadline_iso)
-            deadline_obj = deadline_obj.replace(hour=int(hour), minute=int(minute))
-            deadline_time = time.mktime(deadline_obj.timetuple())
-
             lead_minutes = int(todo.get("lead_time", 10))
-            reminder_time = deadline_time - (lead_minutes * 60)
-            time_diff = reminder_time - current_time
+            deadline_obj = datetime.fromisoformat(deadline_iso)
+            deadline_obj = deadline_obj.replace(hour=int(hour), minute=int(minute), second=0)
+            reminder_obj = deadline_obj - timedelta(minutes=lead_minutes)
+            time_diff = (reminder_obj - datetime.now()).total_seconds()
+
+            if time_diff < -60:
+                print(f"[SKIP] Task '{todo.get('title')}' đã quá hạn nhắc hơn 1 phút.")
+                return
+            elif time_diff < 0:
+                print(f"[INFO] Task '{todo.get('title')}' trễ nhẹ, vẫn cho phép nhắc.")
 
             print(f"[COMPARE] Task: {todo.get('title')}, lead_time: {lead_minutes}, time_diff: {time_diff:.2f}")
 
@@ -333,7 +395,6 @@ class TodoApp:
                     print(f"[SKIP] Task '{todo.get('title')}' không có file nhạc.")
                     return
 
-                # Tải file nhạc nếu chưa có
                 all_music_paths = api_client.get_music_list(self.username)
                 selected_path = next((p for p in all_music_paths if p.endswith(f"/{music_file}")), None)
 
@@ -358,33 +419,109 @@ class TodoApp:
                         print(f"[ERROR] Không thể tải file nhạc từ server: {e}")
                         return
 
-                # ✅ Tự động phát nhạc ngay lập tức
                 try:
-                    pygame.mixer.init()
                     pygame.mixer.music.load(local_file_path)
-                    pygame.mixer.music.play()
+                    pygame.mixer.music.play(loops=-1)
+
                 except Exception as e:
                     print(f"[ERROR] Không thể phát nhạc: {e}")
                     return
 
-                # ✅ Hiện thông báo sau khi phát nhạc
-                answer = messagebox.askyesno(
-                    "⏰ Nhắc nhở",
-                    f"Task '{todo.get('title', '')}' sẽ đến hạn sau {lead_minutes} phút.\n\n"
-                    "Bạn có muốn được nhắc lại sau 5 phút không?\n\n"
-                    "(Chọn 'No' để tắt nhạc và không nhắc lại.)"
+                # ✅ Tự động Yes sau 5 phút nếu không trả lời
+                # ✅ Tự động nhắc lại sau 5 phút nếu không trả lời
+                def auto_yes():
+                    if not self.answered_flags.get(todo_id):
+                        print("[AUTO] Không có phản hồi, sẽ nhắc lại sau 5 phút nữa.")
+                        pygame.mixer.music.stop()
+                        # ⚠️ Không đánh dấu là đã nhắc
+                        self.root.after(300000, lambda: self.play_reminder(todo))  # đợi rồi mới phát lại
+
+                self.show_auto_closing_dialog(
+                    title="⏰ Nhắc nhở",
+                    message=(
+                        f"Task '{todo.get('title', '')}' sẽ đến hạn sau {lead_minutes} phút.\n\n"
+                        "Bạn có muốn được nhắc lại sau 5 phút không?\n\n"
+                        "(Chọn 'No' để tắt nhạc và không nhắc lại.)"
+                    ),
+                    on_yes=lambda: (
+                        print("[INFO] Người dùng chọn YES → nhắc lại sau 5 phút"),
+                        pygame.mixer.music.stop(),
+                        self.root.after(300000, lambda: self.play_reminder(todo))
+                    ),
+                    on_no=lambda manual: (
+                        print("[INFO] Người dùng chọn NO → không nhắc lại")
+                        if manual else
+                        print("[AUTO] Không phản hồi → nhắc lại sau 5 phút"),
+                        pygame.mixer.music.stop(),
+                        self.reminded_tasks.add(todo_id) if manual else self.root.after(300000, lambda: self.play_reminder(todo))
+                    )
                 )
 
-                if answer:
-                    print("[INFO] Người dùng chọn nhắc lại sau 5 phút")
-                    pygame.mixer.music.stop()  # ✅ Dừng nhạc ngay
-                    self.root.after(300000, lambda: [self.play_music(todo.get("music")), messagebox.showinfo("⏰ Nhắc lại", f"Task '{todo.get('title')}' đến hạn sắp tới!")])
-                else:
-                    pygame.mixer.music.stop()
-                    print("[INFO] Người dùng chọn không nhắc lại, nhạc dừng.")
+                # if answer:
+                #     print("[INFO] Người dùng chọn nhắc lại sau 5 phút")
+                #     pygame.mixer.music.stop()
+                #     self.reminded_tasks.add(todo_id)
+                #     self.root.after(300000, lambda: self.play_reminder(todo))
+                # else:
+                #     pygame.mixer.music.stop()
+                #     print("[INFO] Người dùng chọn không nhắc lại, nhạc dừng.")
+                #     self.reminded_tasks.add(todo_id)
+
+                # # ✅ Đánh dấu task đã nhắc
+                # todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
+                # self.reminded_tasks.add(todo_id)
 
         except Exception as e:
             print(f"[ERROR] Failed to parse deadline for task '{todo.get('title', '')}': {e}")
+
+    # ✅ Hàm phát lại sau 5 phút
+    def play_reminder(self, todo):
+        music_file = todo.get("music")
+        title = todo.get("title", "")
+        todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
+
+        if not music_file:
+            print(f"[SKIP] Task '{title}' không có file nhạc.")
+            return
+
+        base_dir = os.path.dirname(__file__)
+        local_music_dir = os.path.join(base_dir, "assets", "music_cache")
+        local_file_path = os.path.join(local_music_dir, music_file)
+
+        if not os.path.exists(local_file_path):
+            print(f"[ERROR] File nhạc không tồn tại để phát lại: {music_file}")
+            return
+
+        try:
+            pygame.mixer.init()
+            pygame.mixer.music.load(local_file_path)
+            pygame.mixer.music.play(loops=-1)
+        except Exception as e:
+            print(f"[ERROR] Không thể phát nhạc nhắc lại: {e}")
+            return
+
+        # ✅ Hiển thị hộp thoại có thể tự đóng
+        self.show_auto_closing_dialog(
+            title="⏰ Nhắc lại",
+            message=(
+                f"Task '{title}' đến hạn sắp tới!\n\n"
+                "Bạn có muốn được nhắc lại sau 5 phút nữa không?\n\n"
+                "(Chọn 'No' để tắt nhạc và không nhắc lại.)"
+            ),
+            on_yes=lambda: (
+                print("[INFO] Người dùng chọn YES → nhắc lại sau 5 phút"),
+                pygame.mixer.music.stop(),
+                self.root.after(300000, lambda: self.play_reminder(todo))
+            ),
+            on_no=lambda manual: (
+                print("[INFO] Người dùng chọn NO → không nhắc lại") if manual
+                else print("[AUTO] Không phản hồi → nhắc lại sau 5 phút"),
+                pygame.mixer.music.stop(),
+                self.reminded_tasks.add(todo_id) if manual else self.root.after(300000, lambda: self.play_reminder(todo))
+            ),
+
+        timeout=300000  # 5 phút
+        )
 
     def toggle_task(self):
         index = self.listbox.curselection()
@@ -435,11 +572,12 @@ class TodoApp:
 
     def check_all_deadlines(self):
         self.todos = api_client.get_todos(self.username)
+
         for todo in self.todos:
             print("[DEBUG]", todo)  # 👈 thêm dòng này để xem từng task
             if not todo.get("completed"):
                 self.schedule_reminder(todo)  # ✅ gọi thay vì compare_time
-        self.root.after(60000, self.check_all_deadlines)
+        self.root.after(5000, self.check_all_deadlines)
 
     def schedule_reminder(self, todo):
         current_time = time.time()
@@ -459,10 +597,38 @@ class TodoApp:
             reminder_time = deadline_time - (lead_minutes * 60)
             delay_ms = int((reminder_time - current_time) * 1000)
 
+            todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
+            if todo_id in self.reminded_tasks:
+                print(f"[SKIP] Task '{todo.get('title')}' đã được nhắc rồi.")
+                return
+
+            # ⏳ Bỏ qua nếu task mới được tạo trong 10 giây
+            created_time = self.task_creation_times.get(todo_id)
+            if created_time:
+                if (datetime.now() - created_time).total_seconds() < 10:
+                    print(f"[SKIP] Task '{todo.get('title')}' mới tạo, chưa cần nhắc.")
+                    return
+
             if delay_ms <= 0:
-                self.compare_time(todo)  # Đã tới thời điểm nhắc
+                if delay_ms < -60 * 1000:
+                    print(f"[SKIP] Task '{todo.get('title')}' đã quá hạn nhắc.")
+                    return
+
+                # ✅ Cho phép task mới được tạo nhắc nhẹ trễ dưới 10 giây
+                created_time = self.task_creation_times.get(todo_id)
+                if created_time:
+                    seconds_since_created = (datetime.now() - created_time).total_seconds()
+                    if seconds_since_created < 10:
+                        print(f"[INFO] Task mới tạo có delay âm nhẹ, sẽ nhắc sau 3 giây.")
+                        self.root.after(3000, lambda: self.compare_time(todo))
+                        return
+
+                # Nếu không thuộc diện mới tạo, vẫn cho nhắc
+                self.compare_time(todo)
+
             else:
-                self.root.after(delay_ms, lambda: self.compare_time(todo))  # ✅ nhắc đúng thời điểm
+                self.root.after(delay_ms, lambda: self.compare_time(todo))
+
         except Exception as e:
             print(f"[ERROR] Failed to schedule reminder: {e}")
 
