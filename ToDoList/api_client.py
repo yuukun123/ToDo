@@ -93,7 +93,13 @@ def toggle_user_lock(username):
         print(f"[TOGGLE LOCK] ❌ Exception: {e}")
     return None
 
-
+def delete_todo(username, todo):
+    res = requests.delete(f"{BASE_URL}/todos/{username}", json=todo)
+    try:
+        print("[DELETE TODO]", res.status_code, res.json())
+    except ValueError:
+        print("[DELETE TODO] ❌ Không thể parse JSON:", res.text)
+    return res.status_code == 200
 
 def update_todo(username, todo):
     res = requests.put(f"{BASE_URL}/todos/{username}", json=todo)

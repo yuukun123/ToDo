@@ -9,7 +9,7 @@ from flask import send_from_directory
 app = Flask(__name__)
 
 
-UPLOAD_ROOT = r"D:\CODE\ToDo\ToDoList\assets"  # <-- Đường dẫn thực tế tới thư mục nhạc của bạn
+UPLOAD_ROOT = r"D:\Code\PythonProject1\ToDo\ToDoList\assets"  # <-- Đường dẫn thực tế tới thư mục nhạc của bạn
 MAX_MUSIC_SIZE_MB = 5
 
 # ⚙️ Cấu hình kết nối MySQL
@@ -199,17 +199,19 @@ def todos(username):
     # DELETE: Xóa todo
     if request.method == "DELETE":
         todo = request.json
-        title = todo.get("title")
-
-        if not title:
+        todo_id = todo.get("id")
+        if not todo_id:
             conn.close()
-            return jsonify({"message": "Missing title"}), 400
+            return jsonify({"message": "Missing todo ID"}), 400
 
-        cursor.execute("DELETE FROM todos WHERE username = %s AND title = %s", (username, title))
+        cursor.execute("DELETE FROM todos WHERE id = %s AND username = %s", (todo_id, username))
         conn.commit()
-        conn.close()
 
-        return jsonify({"message": "Todo deleted"}), 200
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"message": "Todo not found"}), 404
+
+        conn.close()
 
 
 @app.route("/upload-music/<username>", methods=["POST"])
