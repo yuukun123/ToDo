@@ -1,36 +1,25 @@
 import os
 import sys
-
-base_dir = os.path.dirname(os.path.abspath(__file__))
-if base_dir not in sys.path:
-    sys.path.insert(0, base_dir)
-
 from flask import Flask, request, jsonify
 import mysql.connector
 from datetime import datetime
 from flask import send_from_directory
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from admin_web.admin import create_admin_blueprint
 
 app = Flask(__name__)
 
-app.secret_key = '170105@Phong'
-
-
-admin_bp = create_admin_blueprint()
-app.register_blueprint(admin_bp)
 
 UPLOAD_ROOT = os.path.expanduser("~/uploads")
 MAX_MUSIC_SIZE_MB = 5
 
 # ⚙️ Cấu hình kết nối MySQL
 db_config = {
-    "host": "yuu.mysql.pythonanywhere-services.com",
-    "user": "yuu",
-    "password": "170105@Phong",
-    "database": "yuu$todo"
+    "host": "localhost",         # hoặc "127.0.0.1"
+    "user": "root",              # hoặc user MySQL bạn đã tạo
+    "password": "", # thay bằng mật khẩu thực tế
+    "database": "todo"  # tên database bạn đã tạo local
 }
+
 
 def get_db():
     return mysql.connector.connect(**db_config)
@@ -280,6 +269,27 @@ def serve_user_music(username, filename):
 def serve_default_music(filename):
     folder = os.path.join(UPLOAD_ROOT, "default")
     return send_from_directory(folder, filename)
+
+@app.route("/users/<username>/toggle-lock", methods=["POST"])
+def toggle_user_lock(username):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Kiểm tra người dùng có tồn tại không
+    cursor.execute("SELECT status FROM users WHERE username = %s", (username,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        return jsonify({"message": "User not found"}), 404
+
+    # Đảo trạng thái: active <-> banned
+    new_status = "banned" if user["status"] == "active" else "active"
+    cursor.execute("UPDATE users SET status = %s WHERE username = %s", (new_status, username))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"message": f"User {username} is now {new_status}", "status": new_status}), 200
+
 
 # Route mặc định
 @app.route("/", methods=["GET"])

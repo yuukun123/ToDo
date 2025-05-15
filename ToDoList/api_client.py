@@ -1,7 +1,7 @@
 import requests
 from pycparser.ply.lex import TOKEN
 
-BASE_URL = "http://yuu.pythonanywhere.com/"  # ✅ hoặc URL của server bạn
+BASE_URL = "http://localhost:5000/"  # ✅ hoặc URL của server bạn
 
 def register_user(username, password, confirm_password, mail):
     res = requests.post(f"{BASE_URL}/register", json={
@@ -79,6 +79,20 @@ def get_music_list(username):
     if res.status_code == 200:
         return res.json()  # Trả về list các path như "/uploads/default/file.mp3"
     return []
+
+def toggle_user_lock(username):
+    try:
+        res = requests.post(f"{BASE_URL}/users/{username}/toggle-lock")
+        if res.status_code == 200:
+            data = res.json()
+            print(f"[TOGGLE LOCK] {username} -> {data.get('status')}")
+            return data.get("status")  # "active" hoặc "banned"
+        else:
+            print(f"[TOGGLE LOCK] ❌ {res.status_code} - {res.text}")
+    except Exception as e:
+        print(f"[TOGGLE LOCK] ❌ Exception: {e}")
+    return None
+
 
 
 def update_todo(username, todo):
