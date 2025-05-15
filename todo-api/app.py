@@ -1,10 +1,25 @@
+import os
+import sys
+
+base_dir = os.path.dirname(os.path.abspath(__file__))
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+
 from flask import Flask, request, jsonify
 import mysql.connector
 from datetime import datetime
-import os
 from flask import send_from_directory
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from admin_web.admin import create_admin_blueprint
 
 app = Flask(__name__)
+
+app.secret_key = '170105@Phong'
+
+
+admin_bp = create_admin_blueprint()
+app.register_blueprint(admin_bp)
 
 UPLOAD_ROOT = os.path.expanduser("~/uploads")
 MAX_MUSIC_SIZE_MB = 5
@@ -113,7 +128,7 @@ def list_users():
     return jsonify(users), 200
 
 # Quản lý TODOs
-@app.route("/todos/<username>", methods=["GET", "POST", "PUT"])
+@app.route("/todos/<username>", methods=["GET", "POST", "PUT", "DELETE"])
 def todos(username):
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
@@ -191,6 +206,22 @@ def todos(username):
 
         conn.close()
         return jsonify({"message": "Todo updated"}), 200
+    
+    # DELETE: Xóa todo
+    if request.method == "DELETE":
+        todo = request.json
+        title = todo.get("title")
+
+        if not title:
+            conn.close()
+            return jsonify({"message": "Missing title"}), 400
+
+        cursor.execute("DELETE FROM todos WHERE username = %s AND title = %s", (username, title))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"message": "Todo deleted"}), 200
+
 
 @app.route("/upload-music/<username>", methods=["POST"])
 def upload_music(username):
