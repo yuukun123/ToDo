@@ -1,7 +1,7 @@
 import requests
 
 class UserManager:
-    def __init__(self, api_base='https://yuu.pythonanywhere.com'):
+    def __init__(self, api_base='http://localhost:5000'):
         self.api_base = api_base
 
     def get_user_list(self):
@@ -30,7 +30,13 @@ class UserManager:
             response = requests.post(f"{self.api_base}/users/{username}/toggle-lock")
             response.raise_for_status()
             data = response.json()
-            return data.get("banned", False)
+            status = data.get("status")
+            if status == "banned":
+                return True
+            elif status == "active":
+                return False
+            return None  # trường hợp không xác định
+
         except Exception as e:
             print(f"[ERROR] Lỗi khi khóa/mở khóa user {username}: {e}")
             return False

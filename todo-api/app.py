@@ -9,7 +9,7 @@ from flask import send_from_directory
 app = Flask(__name__)
 
 
-UPLOAD_ROOT = os.path.expanduser("~/uploads")
+UPLOAD_ROOT = r"D:\CODE\ToDo\ToDoList\assets"  # <-- Đường dẫn thực tế tới thư mục nhạc của bạn
 MAX_MUSIC_SIZE_MB = 5
 
 # ⚙️ Cấu hình kết nối MySQL

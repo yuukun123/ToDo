@@ -46,7 +46,10 @@ class AdminDashboardApp:
         users = self.user_manager.get_user_list()
         self.user_listbox.delete(0, tk.END)
         for user in users:
-            self.user_listbox.insert(tk.END, user['username'])
+            display_name = user['username']
+            if user.get("status") == "banned":
+                display_name += " [BANNED]"
+            self.user_listbox.insert(tk.END, display_name)
 
     def on_user_selected(self, event):
         selection = event.widget.curselection()
@@ -61,8 +64,15 @@ class AdminDashboardApp:
             index = selection[0]
             username = self.user_listbox.get(index)
             result = self.user_manager.toggle_user_lock(username)  # Giả định bạn có API này
-            status = "đã khóa" if result else "mở khóa"
+            if result is True:
+                status = "đã bị KHÓA"
+            elif result is False:
+                status = "đã được MỞ KHÓA"
+            else:
+                status = "không xác định (có lỗi)"
+
             messagebox.showinfo("Cập nhật", f"Người dùng {username} {status}")
+            self.load_users()  # Cập nhật lại giao diện
 
     def load_tasks(self, username):
         tasks = self.task_manager.get_user_tasks(username)

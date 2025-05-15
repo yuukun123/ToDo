@@ -1,7 +1,7 @@
 import requests
 
 class TaskManager:
-    def __init__(self, api_base='https://yuu.pythonanywhere.com'):
+    def __init__(self, api_base='http://localhost:5000'):
         self.api_base = api_base
 
     def get_user_tasks(self, username):
