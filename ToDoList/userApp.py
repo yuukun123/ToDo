@@ -3,6 +3,15 @@ from tkinter import ttk, messagebox
 from todoApp import TodoApp
 import api_client
 
+def show_loading_screen():
+    splash = tk.Toplevel()
+    splash.title("Đang đăng nhập...")
+    splash.geometry("250x100")
+    splash.resizable(False, False)
+    tk.Label(splash, text="⏳ Đang đăng nhập...", font=("Arial", 12)).pack(expand=True)
+    splash.update()
+    return splash
+
 class LoginRegisterApp:
     def __init__(self, root, manager):
         self.root = root
@@ -63,11 +72,32 @@ class LoginRegisterApp:
         message = response["data"].get("message", "")
 
         if status == 200:
-            messagebox.showinfo("Thành công", f"Chào mừng, {username}!")
-            self.root.destroy()
-            new_root = tk.Tk()
-            app = TodoApp(new_root, username)
-            new_root.mainloop()
+            splash = show_loading_screen()
+            self.root.withdraw()
+
+            main_root = tk.Tk()
+            main_root.withdraw()
+
+            def start_app():
+                # Nếu cần load dữ liệu nặng, làm ở đây (thread con)
+                # Ví dụ: time.sleep(1) giả lập delay
+                # import time
+                # time.sleep(1)
+
+                # Đưa về thread chính để dựng GUI
+                def create_gui():
+                    splash.destroy()
+                    main_root.deiconify()
+                    app = TodoApp(main_root, username)
+                    # Giữ tham chiếu app nếu cần
+                    main_root.app = app
+
+                main_root.after(0, create_gui)
+
+            import threading
+            threading.Thread(target=start_app, daemon=True).start()
+
+            main_root.mainloop()
 
         elif status == 403:
             if message == "Only customer role can log in":
@@ -111,3 +141,5 @@ class LoginRegisterApp:
         self.reg_username.delete(0, tk.END)
         self.reg_password.delete(0, tk.END)
         self.reg_confirm_password.delete(0, tk.END)
+
+

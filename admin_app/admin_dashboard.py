@@ -1,4 +1,5 @@
 import tkinter as tk
+import threading
 from tkinter import ttk, messagebox
 from admin_app.user_manager import UserManager
 from admin_app.task_manager import TaskManager
@@ -45,25 +46,34 @@ class AdminDashboardApp:
     def load_users(self):
         users = self.user_manager.get_user_list()
         self.user_listbox.delete(0, tk.END)
-        for user in users:
-            display_name = user['username']
+        self.user_index_map = {}
+        for i, user in enumerate(users):
+            username = user['username']
             if user.get("status") == "banned":
-                display_name += " [BANNED]"
+                display_name = f"{username} [BANNED]"
+            else:
+                display_name = username
             self.user_listbox.insert(tk.END, display_name)
+            self.user_index_map[i] = username  # quan trọng!
 
     def on_user_selected(self, event):
         selection = event.widget.curselection()
         if selection:
             index = selection[0]
-            username = event.widget.get(index)
+            username = self.user_index_map.get(index)
             self.load_tasks(username)
 
     def toggle_user_status(self):
-        selection = self.user_listbox.curselection()
-        if selection:
+        def background_toggle():
+            selection = self.user_listbox.curselection()
+            if not selection:
+                return
+
             index = selection[0]
-            username = self.user_listbox.get(index)
-            result = self.user_manager.toggle_user_lock(username)  # Giả định bạn có API này
+            username = self.user_index_map.get(index)
+
+            result = self.user_manager.toggle_user_lock(username)
+
             if result is True:
                 status = "đã bị KHÓA"
             elif result is False:
@@ -71,13 +81,23 @@ class AdminDashboardApp:
             else:
                 status = "không xác định (có lỗi)"
 
-            messagebox.showinfo("Cập nhật", f"Người dùng {username} {status}")
-            self.load_users()  # Cập nhật lại giao diện
+            self.root.after(0, lambda: self.after_toggle(username, status))
+
+        threading.Thread(target=background_toggle, daemon=True).start()
+
+    def after_toggle(self, username, status):
+        messagebox.showinfo("Cập nhật", f"Người dùng {username} {status}")
+        self.load_users()
 
     def load_tasks(self, username):
-        tasks = self.task_manager.get_user_tasks(username)
-        for i in self.task_tree.get_children():
-            self.task_tree.delete(i)
+        def task():
+            tasks = self.task_manager.get_user_tasks(username)
+            self.root.after(0, lambda: self.render_tasks(tasks))
+
+        threading.Thread(target=task, daemon=True).start()
+
+    def render_tasks(self, tasks):
+        self.task_tree.delete(*self.task_tree.get_children())
         for task in tasks:
             self.task_tree.insert("", "end", text=task.get("id", ""), values=(task.get("title", ""), str(task.get("completed", False))))
 

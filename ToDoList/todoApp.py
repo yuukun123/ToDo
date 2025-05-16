@@ -9,6 +9,7 @@ import api_client
 import pygame
 import urllib.parse
 import requests
+import threading  # Đảm bảo đã import ở đầu file
 from threading import Timer
 
 class TodoApp:
@@ -16,7 +17,9 @@ class TodoApp:
         self.root = root
         self.username = username
         self.root.title(f"Todo List - {username}")
-        self.todos = api_client.get_todos(username)
+        # self.todos = api_client.get_todos(username)
+        self.todos = []
+
         self.reminded_tasks = set()  # ✅ Tránh nhắc lại trùng
         self.task_creation_times = {}
         self.check_all_deadlines()
@@ -131,11 +134,37 @@ class TodoApp:
 
 
         self.refresh_list()
+        self.refresh_list()
+        self.load_initial_data()
 
     # def on_close(self):
     #     if messagebox.askokcancel("Thoát", "Bạn có chắc muốn thoát?"):
     #         api_client.logout_user(self.username)
     #         self.root.destroy()
+
+    def load_initial_data(self):
+        def load():
+            todos = api_client.get_todos(self.username)
+            music_list = api_client.get_music_list(self.username)
+
+            def update_ui():
+                self.todos = todos
+                self.refresh_list()
+
+                # cập nhật lại OptionMenu nhạc nếu cần
+                all_music = [os.path.basename(p) for p in music_list]
+                all_music.append("Tùy chọn khác (tải lên...)")
+                menu = self.music_menu["menu"]
+                menu.delete(0, "end")
+                for music in all_music:
+                    menu.add_command(label=music, command=lambda value=music: self.selected_music.set(value))
+                self.selected_music.set(all_music[0] if all_music else "")
+
+                self.check_all_deadlines()
+
+            self.root.after(0, update_ui)
+
+        threading.Thread(target=load, daemon=True).start()
 
     def show_auto_closing_dialog(self, title, message, on_yes, on_no, timeout=300000):
         dialog = tk.Toplevel(self.root)
@@ -199,60 +228,61 @@ class TodoApp:
                         messagebox.showerror("Lỗi", "Không thể xóa task.")
 
     def add_task(self):
-        title = self.title_entry.get()
-        description = self.description_entry.get()
-        date_str = self.date_entry.get()
-        hour_str = self.hour_spinbox.get()
-        minute_str = self.minute_spinbox.get()
-        music_path = self.selected_music.get()
-        lead_time = int(self.lead_spinbox.get())
+        def background_add():
+            title = self.title_entry.get()
+            description = self.description_entry.get()
+            date_str = self.date_entry.get()
+            hour_str = self.hour_spinbox.get()
+            minute_str = self.minute_spinbox.get()
+            music_path = self.selected_music.get()
+            lead_time = int(self.lead_spinbox.get())
 
-        if not title:
-            messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập tên task.")
-            return
+            if not title:
+                self.root.after(0, lambda: messagebox.showwarning("Thiếu thông tin", "Vui lòng nhập tên task."))
+                return
 
-        try:
-            deadline_obj = datetime.strptime(f"{date_str} {hour_str}:{minute_str}", "%d-%m-%Y %H:%M")
-            deadline_iso = deadline_obj.isoformat()
-        except ValueError:
-            messagebox.showerror("Lỗi", "Ngày hoặc giờ không hợp lệ.")
-            return
+            try:
+                deadline_obj = datetime.strptime(f"{date_str} {hour_str}:{minute_str}", "%d-%m-%Y %H:%M")
+                deadline_iso = deadline_obj.isoformat()
+            except ValueError:
+                self.root.after(0, lambda: messagebox.showerror("Lỗi", "Ngày hoặc giờ không hợp lệ."))
+                return
 
-        success = api_client.add_todo(
-            self.username,
-            title=title,
-            hour=int(hour_str),
-            minute=int(minute_str),
-            description=description,
-            deadline=deadline_iso,
-            completed=False,
-            music=music_path,
-            lead_time=lead_time
-        )
+            success = api_client.add_todo(
+                self.username,
+                title=title,
+                hour=int(hour_str),
+                minute=int(minute_str),
+                description=description,
+                deadline=deadline_iso,
+                completed=False,
+                music=music_path,
+                lead_time=lead_time
+            )
 
-        if success:
-            self.todos = api_client.get_todos(self.username)
-            # 🕒 Ghi lại thời điểm tạo task để không nhắc liền
-            for todo in self.todos:
-                if todo.get("title") == title:
-                    todo_id = todo.get("_id") or todo.get("id") or todo.get("title")
-                    self.task_creation_times[todo_id] = datetime.now()
+            def update_ui():
+                if success:
+                    self.todos = api_client.get_todos(self.username)
+                    for todo in self.todos:
+                        if todo.get("title") == title:
+                            todo_id = todo.get("id") or todo.get("title")
+                            self.task_creation_times[todo_id] = datetime.now()
+                            todo["lead_time"] = lead_time
+                            self.compare_time(todo)
 
-            self.refresh_list()
-            self.title_entry.delete(0, tk.END)
-            self.description_entry.delete(0, tk.END)
-            self.hour_spinbox.delete(0, tk.END)
-            self.hour_spinbox.insert(0, "00")
-            self.minute_spinbox.delete(0, tk.END)
-            self.minute_spinbox.insert(0, "00")
+                    self.refresh_list()
+                    self.title_entry.delete(0, tk.END)
+                    self.description_entry.delete(0, tk.END)
+                    self.hour_spinbox.delete(0, tk.END)
+                    self.hour_spinbox.insert(0, "00")
+                    self.minute_spinbox.delete(0, tk.END)
+                    self.minute_spinbox.insert(0, "00")
+                else:
+                    messagebox.showerror("Lỗi", "Không thể thêm task.")
 
-            # ✅ Kiểm tra deadline sau khi thêm task
-            for todo in self.todos:
-                if todo.get("title") == title:
-                    todo["lead_time"] = lead_time
-                    self.compare_time(todo)
-        else:
-            messagebox.showerror("Lỗi", "Không thể thêm task.")
+            self.root.after(0, update_ui)
+
+        threading.Thread(target=background_add, daemon=True).start()
 
     def refresh_list(self):
         self.listbox.delete(0, tk.END)
