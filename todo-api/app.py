@@ -8,8 +8,8 @@ from flask import send_from_directory
 
 app = Flask(__name__)
 
-
-UPLOAD_ROOT = r"D:\Code\PythonProject1\ToDo\ToDoList\assets"  # <-- Đường dẫn thực tế tới thư mục nhạc của bạn
+# UPLOAD_ROOT = r"D:\Code\PythonProject1\ToDo\ToDoList\assets"
+UPLOAD_ROOT = r"D:\Code\ToDo\ToDoList\assets"  # <-- Đường dẫn thực tế tới thư mục nhạc của bạn
 MAX_MUSIC_SIZE_MB = 5
 
 # ⚙️ Cấu hình kết nối MySQL
@@ -19,7 +19,6 @@ db_config = {
     "password": "", # thay bằng mật khẩu thực tế
     "database": "todo"  # tên database bạn đã tạo local
 }
-
 
 def get_db():
     return mysql.connector.connect(**db_config)
