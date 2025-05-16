@@ -17,15 +17,20 @@ class TodoApp:
         self.root = root
         self.username = username
         self.root.title(f"Todo List - {username}")
-        # self.todos = api_client.get_todos(username)
         self.todos = []
+        self.music_list = []
 
-        self.reminded_tasks = set()  # ✅ Tránh nhắc lại trùng
+        self.reminded_tasks = set()  # Tránh nhắc lại trùng
         self.task_creation_times = {}
-        self.check_all_deadlines()
+        self.answered_flags = {}  # lưu trạng thái trả lời của từng task
 
-        self.answered_flags = {}  # ✅ lưu trạng thái trả lời của từng task
+        # Dựng giao diện
+        self.build_ui()
 
+        # Trì hoãn load dữ liệu sau 500ms để giao diện vẽ xong
+        self.root.after(300, self.load_initial_data)
+
+    def build_ui(self):
         # Header với thông tin người dùng và nút logout
         self.header_frame = tk.Frame(self.root)
         self.header_frame.pack(padx=10, pady=(10, 0), fill='x')
@@ -36,23 +41,23 @@ class TodoApp:
         self.logout_button = tk.Button(self.header_frame, text="🔓 Logout", command=self.logout)
         self.logout_button.pack(side=tk.RIGHT)
 
-        # Sau đó mới pack phần nội dung chính
+        # Nội dung chính
         self.frame = tk.Frame(self.root)
         self.frame.pack(padx=10, pady=10)
 
-        # nhập tiêu đề
+        # Nhập tiêu đề
         self.title_label = tk.Label(self.frame, text="Title")
         self.title_label.pack()
         self.title_entry = tk.Entry(self.frame, width=40)
         self.title_entry.pack(pady=5)
 
-        # nhập mô tả công việc
+        # Nhập mô tả
         self.description_label = tk.Label(self.frame, text="Description")
         self.description_label.pack()
         self.description_entry = tk.Entry(self.frame, width=40)
         self.description_entry.pack(pady=5)
 
-        # chọn deadline
+        # Chọn deadline
         self.Deadline_label = tk.Label(self.frame, text="Deadline")
         self.Deadline_label.pack()
 
@@ -63,7 +68,6 @@ class TodoApp:
                                     foreground='white', borderwidth=2, date_pattern='dd-mm-yyyy')
         self.date_entry.pack(side=tk.LEFT)
 
-        # chọn phút trước thông báo deadline trước bao nhiêu
         self.hour_spinbox = tk.Spinbox(self.day_frame, from_=0, to=23, width=3, format="%02.0f")
         self.hour_spinbox.pack(side=tk.LEFT, padx=(10, 0))
 
@@ -73,49 +77,39 @@ class TodoApp:
         self.minute_spinbox = tk.Spinbox(self.day_frame, from_=0, to=59, width=3, format="%02.0f")
         self.minute_spinbox.pack(side=tk.LEFT)
 
-        # nhăc khi còn bao nhiêu phút tới deadline
+        # Nhắc trước
         self.lead_label = tk.Label(self.frame, text="Nhắc trước (phút):")
         self.lead_label.pack()
 
         self.lead_spinbox = tk.Spinbox(self.frame, from_=0, to=120, width=5)
         self.lead_spinbox.pack(pady=3)
         self.lead_spinbox.delete(0, tk.END)
-        self.lead_spinbox.insert(0, "10")  # mặc định nhắc trước 10 phút
+        self.lead_spinbox.insert(0, "10")  # mặc định 10 phút
 
-        # === Mục chọn nhạc ===
+        # Mục chọn nhạc
         self.music_label = tk.Label(self.frame, text="Chọn nhạc nhắc nhở:")
         self.music_label.pack()
 
-        # Lấy danh sách nhạc từ API (bao gồm cả mặc định + nhạc user)
-        all_music_paths = api_client.get_music_list(username)
-        all_music = [os.path.basename(path) for path in all_music_paths]  # chỉ lấy tên file
-
-        # Thêm lựa chọn upload
-        all_music.append("Tùy chọn khác (tải lên...)")
-
-        # Đặt vào OptionMenu
+        # Ban đầu để trống, sẽ cập nhật khi load dữ liệu
         self.selected_music = tk.StringVar()
-        self.selected_music.set(all_music[0])  # chọn mục đầu tiên mặc định
+        self.music_menu = tk.OptionMenu(self.frame, self.selected_music, "")
+        self.music_menu.pack(pady=5)
 
-        # Tạo khung chứa dropdown + nút nghe thử
+        # Khung chứa dropdown và nút nghe thử, dừng
         self.music_frame = tk.Frame(self.frame)
         self.music_frame.pack(pady=5)
 
-        self.music_menu = tk.OptionMenu(self.music_frame, self.selected_music, *all_music, command=self.handle_music_choice)
-        self.music_menu.pack(side=tk.LEFT)
-
-        # nút nghe thử nhạc
         self.play_button = tk.Button(self.music_frame, text="🔊 Nghe thử", command=self.preview_music)
         self.play_button.pack(side=tk.LEFT, padx=5)
 
-        # nút dừng nghe
         self.stop_button = tk.Button(self.music_frame, text="⏹ Dừng", command=self.stop_music)
         self.stop_button.pack(side=tk.LEFT)
 
-        # nút add task
+        # Nút thêm task
         self.add_button = tk.Button(self.frame, text="Add Task", command=self.add_task)
         self.add_button.pack(pady=5)
 
+        # Listbox hiển thị danh sách task
         self.listbox = tk.Listbox(self.frame, width=50)
         self.listbox.pack(pady=10)
 
@@ -132,27 +126,30 @@ class TodoApp:
         except Exception as e:
             print(f"[ERROR] Không thể khởi tạo pygame mixer: {e}")
 
-
         self.refresh_list()
-        self.refresh_list()
-        self.load_initial_data()
-
-    # def on_close(self):
-    #     if messagebox.askokcancel("Thoát", "Bạn có chắc muốn thoát?"):
-    #         api_client.logout_user(self.username)
-    #         self.root.destroy()
 
     def load_initial_data(self):
         def load():
-            todos = api_client.get_todos(self.username)
-            music_list = api_client.get_music_list(self.username)
+            try:
+                todos = api_client.get_todos(self.username)
+            except Exception as e:
+                print(f"[ERROR] Lỗi lấy todo: {e}")
+                todos = []
+
+            try:
+                music_list = api_client.get_music_list(self.username)
+            except Exception as e:
+                print(f"[ERROR] Lỗi lấy music list: {e}")
+                music_list = []
 
             def update_ui():
                 self.todos = todos
+                self.music_list = music_list
+
                 self.refresh_list()
 
-                # cập nhật lại OptionMenu nhạc nếu cần
-                all_music = [os.path.basename(p) for p in music_list]
+                # cập nhật lại OptionMenu nhạc
+                all_music = [os.path.basename(p) for p in self.music_list]
                 all_music.append("Tùy chọn khác (tải lên...)")
                 menu = self.music_menu["menu"]
                 menu.delete(0, "end")
@@ -248,29 +245,42 @@ class TodoApp:
                 self.root.after(0, lambda: messagebox.showerror("Lỗi", "Ngày hoặc giờ không hợp lệ."))
                 return
 
-            success = api_client.add_todo(
-                self.username,
-                title=title,
-                hour=int(hour_str),
-                minute=int(minute_str),
-                description=description,
-                deadline=deadline_iso,
-                completed=False,
-                music=music_path,
-                lead_time=lead_time
-            )
+            try:
+                success = api_client.add_todo(
+                    self.username,
+                    title=title,
+                    hour=int(hour_str),
+                    minute=int(minute_str),
+                    description=description,
+                    deadline=deadline_iso,
+                    completed=False,
+                    music=music_path,
+                    lead_time=lead_time
+                )
+            except Exception as e:
+                print(f"[ERROR] Lỗi thêm task: {e}")
+                success = False
 
             def update_ui():
                 if success:
-                    self.todos = api_client.get_todos(self.username)
-                    for todo in self.todos:
-                        if todo.get("title") == title:
-                            todo_id = todo.get("id") or todo.get("title")
-                            self.task_creation_times[todo_id] = datetime.now()
-                            todo["lead_time"] = lead_time
-                            self.compare_time(todo)
-
+                    # Append task mới tạm thời thay vì load lại toàn bộ (nếu server trả về id thì tốt)
+                    new_task = {
+                        "title": title,
+                        "hour": int(hour_str),
+                        "minute": int(minute_str),
+                        "description": description,
+                        "deadline": deadline_iso,
+                        "completed": False,
+                        "music": music_path,
+                        "lead_time": lead_time,
+                        "completed_at": None
+                    }
+                    self.todos.append(new_task)
+                    todo_id = new_task.get("id") or new_task.get("title")
+                    self.task_creation_times[todo_id] = datetime.now()
                     self.refresh_list()
+                    self.compare_time(new_task)
+
                     self.title_entry.delete(0, tk.END)
                     self.description_entry.delete(0, tk.END)
                     self.hour_spinbox.delete(0, tk.END)
@@ -450,7 +460,7 @@ class TodoApp:
                     print(f"[SKIP] Task '{todo.get('title')}' không có file nhạc.")
                     return
 
-                all_music_paths = api_client.get_music_list(self.username)
+                all_music_paths = self.music_list  # dùng cache
                 selected_path = next((p for p in all_music_paths if p.endswith(f"/{music_file}")), None)
 
                 if not selected_path:
