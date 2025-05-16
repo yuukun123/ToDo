@@ -34,6 +34,7 @@ class TodoApp:
 
         # Dựng giao diện
         self.build_ui()
+        self.running = True
 
         # Trì hoãn load dữ liệu sau 500ms để giao diện vẽ xong
         self.root.after(200, self.load_initial_data)
@@ -649,18 +650,23 @@ class TodoApp:
                 self.selected_music.set(self.music_options[0])  # Quay lại default nếu người dùng cancel
 
     def check_all_deadlines(self):
-        if not getattr(self, 'running', True):  # Nếu flag bị tắt thì dừng
-            return
+        try:
+            if not getattr(self, 'running', True):
+                return
+            if not self.root.winfo_exists():
+                return
 
-        if not self.root.winfo_exists():
-            return  # Cửa sổ đã bị destroy, không làm gì nữa
+            self.todos = api_client.get_todos(self.username)
+            for todo in self.todos:
+                if not todo.get("completed"):
+                    self.schedule_reminder(todo)
 
-        self.todos = api_client.get_todos(self.username)
-        for todo in self.todos:
-            if not todo.get("completed"):
-                self.schedule_reminder(todo)
+            if self.running and self.root.winfo_exists():
+                self.root.after(5000, self.check_all_deadlines)
 
-        self.root.after(5000, self.check_all_deadlines)
+
+        except Exception as e:
+            print(f"[ERROR] check_all_deadlines: {e}")
 
     def schedule_reminder(self, todo):
         current_time = time.time()
@@ -718,7 +724,16 @@ class TodoApp:
     def logout(self):
         confirm = messagebox.askyesno("Logout", "Bạn có chắc chắn muốn đăng xuất?")
         if confirm:
-            api_client.logout_user(self.username) # Gọi API logout
+            api_client.logout_user(self.username)
+
+            self.running = False
+
+            # ✅ Hủy hàm after nếu còn tồn tại
+            if hasattr(self, 'after_id'):
+                try:
+                    self.root.after_cancel(self.after_id)
+                except Exception as e:
+                    print(f"[WARN] Không thể hủy after: {e}")
 
             self.running = False
             self.root.destroy()
