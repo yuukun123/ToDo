@@ -10,7 +10,6 @@ import pygame
 import urllib.parse
 import requests
 import threading  # Đảm bảo đã import ở đầu file
-from threading import Timer
 
 class TodoApp:
     def __init__(self, root, username):
@@ -24,11 +23,20 @@ class TodoApp:
         self.task_creation_times = {}
         self.answered_flags = {}  # lưu trạng thái trả lời của từng task
 
+        self.splash = tk.Toplevel(self.root)
+        self.splash.title("Loading")
+        self.splash.geometry("250x100")
+        self.splash.resizable(False, False)
+        tk.Label(self.splash, text="⏳ Đang tải dữ liệu...", font=("Arial", 12)).pack(expand=True)
+        self.splash.grab_set()  # Chặn thao tác với cửa sổ chính cho tới khi xong
+
+        self.root.withdraw()
+
         # Dựng giao diện
         self.build_ui()
 
         # Trì hoãn load dữ liệu sau 500ms để giao diện vẽ xong
-        self.root.after(300, self.load_initial_data)
+        self.root.after(200, self.load_initial_data)
 
     def build_ui(self):
         # Header với thông tin người dùng và nút logout
@@ -158,6 +166,11 @@ class TodoApp:
                 self.selected_music.set(all_music[0] if all_music else "")
 
                 self.check_all_deadlines()
+
+                # ✅ Tắt splash loading sau khi xong
+                if hasattr(self, 'splash') and self.splash.winfo_exists():
+                    self.splash.destroy()
+                    self.root.deiconify()
 
             self.root.after(0, update_ui)
 
@@ -636,12 +649,17 @@ class TodoApp:
                 self.selected_music.set(self.music_options[0])  # Quay lại default nếu người dùng cancel
 
     def check_all_deadlines(self):
-        self.todos = api_client.get_todos(self.username)
+        if not getattr(self, 'running', True):  # Nếu flag bị tắt thì dừng
+            return
 
+        if not self.root.winfo_exists():
+            return  # Cửa sổ đã bị destroy, không làm gì nữa
+
+        self.todos = api_client.get_todos(self.username)
         for todo in self.todos:
-            print("[DEBUG]", todo)  # 👈 thêm dòng này để xem từng task
             if not todo.get("completed"):
-                self.schedule_reminder(todo)  # ✅ gọi thay vì compare_time
+                self.schedule_reminder(todo)
+
         self.root.after(5000, self.check_all_deadlines)
 
     def schedule_reminder(self, todo):
@@ -702,6 +720,7 @@ class TodoApp:
         if confirm:
             api_client.logout_user(self.username) # Gọi API logout
 
+            self.running = False
             self.root.destroy()
 
             # Quay lại màn hình đăng nhập
