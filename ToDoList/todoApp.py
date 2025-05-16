@@ -11,6 +11,8 @@ import urllib.parse
 import requests
 import threading  # Đảm bảo đã import ở đầu file
 
+
+
 class TodoApp:
     def __init__(self, root, username):
         self.root = root
@@ -38,6 +40,8 @@ class TodoApp:
 
         # Trì hoãn load dữ liệu sau 500ms để giao diện vẽ xong
         self.root.after(200, self.load_initial_data)
+
+
 
     def build_ui(self):
         # Header với thông tin người dùng và nút logout
@@ -662,11 +666,16 @@ class TodoApp:
                     self.schedule_reminder(todo)
 
             if self.running and self.root.winfo_exists():
-                self.root.after(5000, self.check_all_deadlines)
-
+                self.after_id = self.root.after(5000, self.check_all_deadlines)
 
         except Exception as e:
             print(f"[ERROR] check_all_deadlines: {e}")
+
+    def stop_checking(self):
+        self.running = False
+        if self.after_id is not None:
+            self.root.after_cancel(self.after_id)
+            self.after_id = None
 
     def schedule_reminder(self, todo):
         current_time = time.time()
@@ -746,3 +755,5 @@ class TodoApp:
             new_root = tk.Tk()
             app = LoginRegisterApp(new_root, manageUser())
             new_root.mainloop()
+
+
