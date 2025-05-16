@@ -73,31 +73,31 @@ class LoginRegisterApp:
 
         if status == 200:
             splash = show_loading_screen()
-            self.root.withdraw()
-
-            main_root = tk.Tk()
-            main_root.withdraw()
+            self.root.withdraw()  # Ẩn giao diện login
 
             def start_app():
-                # Nếu cần load dữ liệu nặng, làm ở đây (thread con)
-                # Ví dụ: time.sleep(1) giả lập delay
-                # import time
-                # time.sleep(1)
+                # Chờ nếu cần tải gì đó (giả lập delay)
+                # import time; time.sleep(1)
 
-                # Đưa về thread chính để dựng GUI
                 def create_gui():
                     splash.destroy()
-                    main_root.deiconify()
-                    app = TodoApp(main_root, username)
-                    # Giữ tham chiếu app nếu cần
-                    main_root.app = app
 
-                main_root.after(0, create_gui)
+                    # Tạo cửa sổ mới cho TodoApp
+                    todo_window = tk.Toplevel(self.root)
+                    app = TodoApp(todo_window, username, login_root=self.root)  # 👈 truyền root login vào
+
+                    # Khi TodoApp đóng → hiện lại login
+                    def on_closing():
+                        app.stop_checking()
+                        todo_window.destroy()
+                        self.root.deiconify()  # Hiện lại login
+
+                    todo_window.protocol("WM_DELETE_WINDOW", on_closing)
+
+                self.root.after(0, create_gui)
 
             import threading
             threading.Thread(target=start_app, daemon=True).start()
-
-            main_root.mainloop()
 
         elif status == 403:
             if message == "Only customer role can log in":

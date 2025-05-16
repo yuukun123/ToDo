@@ -14,8 +14,10 @@ import threading  # Đảm bảo đã import ở đầu file
 
 
 class TodoApp:
-    def __init__(self, root, username):
-        self.root = root
+    def __init__(self, root, username, login_root=None):
+        self.root = root  # Đây là cửa sổ Todo (Toplevel)
+        self.login_root = login_root  # Đây là cửa sổ login (Tk)
+
         self.username = username
         self.root.title(f"Todo List - {username}")
         self.todos = []
@@ -737,23 +739,17 @@ class TodoApp:
 
             self.running = False
 
-            # ✅ Hủy hàm after nếu còn tồn tại
             if hasattr(self, 'after_id'):
                 try:
                     self.root.after_cancel(self.after_id)
                 except Exception as e:
                     print(f"[WARN] Không thể hủy after: {e}")
 
-            self.running = False
-            self.root.destroy()
+            self.root.destroy()  # Đóng cửa sổ TodoApp
 
-            # Quay lại màn hình đăng nhập
-            import tkinter as tk
-            from manageUser import manageUser
-            from userApp import LoginRegisterApp
+            if self.login_root:
+                self.login_root.deiconify()  # 👈 Hiện lại cửa sổ login
 
-            new_root = tk.Tk()
-            app = LoginRegisterApp(new_root, manageUser())
-            new_root.mainloop()
+
 
 
