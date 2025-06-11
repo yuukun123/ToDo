@@ -211,6 +211,7 @@ def todos(username):
             return jsonify({"message": "Todo not found"}), 404
 
         conn.close()
+        return jsonify({"message": "Todo deleted"}), 200  # <-- thêm dòng này
 
 
 @app.route("/upload-music/<username>", methods=["POST"])

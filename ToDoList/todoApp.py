@@ -394,51 +394,51 @@ class TodoApp:
     def preview_music(self):
         import requests
 
-        selected = self.selected_music.get()
-        if selected == "Tùy chọn khác (tải lên...)":
-            messagebox.showinfo("Thông báo", "Bạn cần chọn một file nhạc cụ thể để nghe thử.")
-            return
+        def play_in_thread():
+            selected = self.selected_music.get()
+            if selected == "Tùy chọn khác (tải lên...)":
+                self.root.after(0, lambda: messagebox.showinfo("Thông báo", "Bạn cần chọn một file nhạc cụ thể để nghe thử."))
+                return
 
-        # Tìm đường dẫn gốc từ get_music_list
-        all_music_paths = api_client.get_music_list(self.username)
-        selected_path = None
-        for path in all_music_paths:
-            if path.endswith(f"/{selected}"):
-                selected_path = path
-                break
+            # Dò đường dẫn từ danh sách nhạc
+            all_music_paths = api_client.get_music_list(self.username)
+            selected_path = next((p for p in all_music_paths if p.endswith(f"/{selected}")), None)
 
-        if not selected_path:
-            messagebox.showerror("Lỗi", f"Không tìm thấy đường dẫn nhạc cho: {selected}")
-            return
+            if not selected_path:
+                self.root.after(0, lambda: messagebox.showerror("Lỗi", f"Không tìm thấy đường dẫn nhạc cho: {selected}"))
+                return
 
-        # Tải file từ server về local
-        # Encode tên file an toàn trong URL
-        encoded_path = urllib.parse.quote(selected_path)
-        server_url = f"http://yuu.pythonanywhere.com{encoded_path}"  # nối path thành URL
-        base_dir = os.path.dirname(__file__)  # thư mục chứa file .py hiện tại
-        local_music_dir = os.path.join(base_dir, "assets", "music_cache")
+            # Xác định đường dẫn local
+            base_dir = os.path.dirname(__file__)
+            local_music_dir = os.path.join(base_dir, "assets", "default")
+            os.makedirs(local_music_dir, exist_ok=True)
+            local_file_path = os.path.join(local_music_dir, selected)
 
-        os.makedirs(local_music_dir, exist_ok=True)
-        local_file_path = os.path.join(local_music_dir, selected)
+            # Nếu file chưa tồn tại → tải
+            if not os.path.exists(local_file_path):
+                encoded_path = urllib.parse.quote(selected_path)
+                server_url = f"http://yuu.pythonanywhere.com{encoded_path}"
 
-        try:
-            r = requests.get(server_url)
-            r.raise_for_status()
-            with open(local_file_path, "wb") as f:
-                f.write(r.content)
-        except Exception as e:
-            print(f"[ERROR] Không thể tải file từ server: {e}")
-            messagebox.showerror("Lỗi", "Không thể tải file nhạc từ server.")
-            return
+                try:
+                    r = requests.get(server_url)
+                    r.raise_for_status()
+                    with open(local_file_path, "wb") as f:
+                        f.write(r.content)
+                except Exception as e:
+                    print(f"[ERROR] Không thể tải file từ server: {e}")
+                    self.root.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải file nhạc từ server."))
+                    return
 
-        # Phát nhạc
-        try:
-            pygame.mixer.init()
-            pygame.mixer.music.load(local_file_path)
-            pygame.mixer.music.play()
-        except Exception as e:
-            print(f"[ERROR] Không thể phát nhạc: {e}")
-            messagebox.showerror("Lỗi", "Không thể phát file nhạc.")
+            # Phát nhạc
+            try:
+                pygame.mixer.init()
+                pygame.mixer.music.load(local_file_path)
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"[ERROR] Không thể phát nhạc: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Lỗi", "Không thể phát file nhạc."))
+
+        threading.Thread(target=play_in_thread, daemon=True).start()
 
     def stop_music(self):
         try:
